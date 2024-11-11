@@ -1,9 +1,8 @@
 load("//src/engine:helper.bzl", "THIN_LTO_FEATURE_IF_CLANG", "THIN_LTO_LINKOPTS_IF_CLANG")
-load("@mujoco//tools:def.bzl", "mj_cc_library")
 
 package(default_visibility = ["@mujoco//:__subpackages__"])
 
-mj_cc_library(
+cc_library(
     name = "engine",
     srcs = [
         "engine_collision_driver.c",
@@ -46,6 +45,7 @@ mj_cc_library(
         "engine_vis_visualize.h",
     ],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -77,7 +77,6 @@ mj_cc_library(
         ":engine_name",
         ":engine_plugin",
         ":engine_ray",
-        ":engine_sort",
         ":engine_util_blas",
         ":engine_util_errmem",
         ":engine_util_misc",
@@ -92,7 +91,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_array_safety",
     copts = ["-Wshadow"],
     features = THIN_LTO_FEATURE_IF_CLANG,
@@ -101,7 +100,7 @@ mj_cc_library(
     textual_hdrs = ["engine_array_safety.h"],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_callback",
     srcs = ["engine_callback.c"],
     hdrs = ["engine_callback.h"],
@@ -122,7 +121,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_collision_box",
     srcs = [
         "engine_collision_box.c",
@@ -146,7 +145,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_collision_convex",
     srcs = [
         "engine_collision_convex.c",
@@ -157,6 +156,7 @@ mj_cc_library(
         "engine_collision_gjk.h",
     ],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -171,7 +171,6 @@ mj_cc_library(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":engine_collision_primitive",
-        ":engine_io",
         ":engine_util_blas",
         ":engine_util_errmem",
         ":engine_util_misc",
@@ -181,7 +180,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_collision_primitive",
     srcs = ["engine_collision_primitive.c"],
     hdrs = ["engine_collision_primitive.h"],
@@ -205,7 +204,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_crossplatform",
     srcs = ["engine_crossplatform.cc"],
     hdrs = ["engine_crossplatform.h"],
@@ -223,11 +222,12 @@ mj_cc_library(
     target_compatible_with = ["@platforms//os:linux"],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_io",
     srcs = ["engine_io.c"],
     hdrs = ["engine_io.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wno-type-limits",
         "-Wshadow",
@@ -253,7 +253,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_macro",
     hdrs = ["engine_macro.h"],
     copts = ["-Wshadow"],
@@ -266,7 +266,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_name",
     srcs = ["engine_name.c"],
     hdrs = ["engine_name.h"],
@@ -289,7 +289,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_plugin",
     srcs = ["engine_plugin.cc"],
     hdrs = [
@@ -297,6 +297,7 @@ mj_cc_library(
         "engine_plugin.h",
     ],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -315,11 +316,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_ray",
     srcs = ["engine_ray.c"],
     hdrs = ["engine_ray.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -343,16 +345,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
-    name = "engine_sort",
-    hdrs = ["engine_sort.h"],
-    copts = ["-Wshadow"],
-    features = THIN_LTO_FEATURE_IF_CLANG,
-    linkopts = THIN_LTO_LINKOPTS_IF_CLANG,
-    target_compatible_with = ["@platforms//os:linux"],
-)
-
-mj_cc_library(
+cc_library(
     name = "engine_util_blas",
     srcs = ["engine_util_blas.c"],
     hdrs = ["engine_util_blas.h"],
@@ -376,7 +369,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_container",
     srcs = ["engine_util_container.c"],
     hdrs = ["engine_util_container.h"],
@@ -396,11 +389,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_errmem",
     srcs = ["engine_util_errmem.c"],
     hdrs = ["engine_util_errmem.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -420,11 +414,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_misc",
     srcs = ["engine_util_misc.c"],
     hdrs = ["engine_util_misc.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -447,7 +442,7 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_sparse",
     srcs = [
         "engine_util_sparse.c",
@@ -480,11 +475,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_spatial",
     srcs = ["engine_util_spatial.c"],
     hdrs = ["engine_util_spatial.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -504,11 +500,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_util_solve",
     srcs = ["engine_util_solve.c"],
     hdrs = ["engine_util_solve.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",
@@ -532,11 +529,12 @@ mj_cc_library(
     ],
 )
 
-mj_cc_library(
+cc_library(
     name = "engine_vis_init",
     srcs = ["engine_vis_init.c"],
     hdrs = ["engine_vis_init.h"],
     copts = [
+        "-Wno-unknown-pragmas",
         "-Wno-error=unknown-pragmas",
         "-Wshadow",
         "-Isrc",

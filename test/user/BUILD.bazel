@@ -30,14 +30,11 @@ cc_test(
     ],
     env = PLUGIN_DIR,
     deps = [
-        "//:mujoco",
         "//src/user:user_cache",
         "//src/user:user_resource",
         "//src/user:user_util",
         "//src/user:user_vfs",
-        "//src/cc:array_safety",
         "//test:fixture",
         "@googletest//:gtest_main",
     ],
-    linkstatic=True,
 )

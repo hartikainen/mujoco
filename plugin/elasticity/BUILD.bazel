@@ -1,8 +1,6 @@
-load("@mujoco//tools:def.bzl", "mj_cc_library")
-
 package(default_visibility = ["@mujoco//:__subpackages__"])
 
-mj_cc_library(
+cc_library(
     name = "elasticity_impl",
     srcs = [
         "elasticity.cc",
@@ -10,14 +8,16 @@ mj_cc_library(
     hdrs = [
         "elasticity.h",
     ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:mujoco_hdrs",
     ],
-    alwayslink = True,
 )
 
-mj_cc_library(
+cc_library(
     name = "cable",
     srcs = [
         "cable.cc",
@@ -30,10 +30,27 @@ mj_cc_library(
         ":elasticity_impl",
         "//:mujoco_hdrs",
     ],
-    alwayslink = True,
 )
 
-mj_cc_library(
+cc_library(
+    name = "solid",
+    srcs = [
+        "solid.cc",
+    ],
+    hdrs = [
+        "solid.h",
+    ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":elasticity_impl",
+        "//:mujoco_hdrs",
+    ],
+)
+
+cc_library(
     name = "shell",
     srcs = [
         "shell.cc",
@@ -41,23 +58,48 @@ mj_cc_library(
     hdrs = [
         "shell.h",
     ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":elasticity_impl",
         "//:mujoco_hdrs",
     ],
-    alwayslink = True,
 )
 
-mj_cc_library(
+cc_library(
+    name = "membrane",
+    srcs = [
+        "membrane.cc",
+    ],
+    hdrs = [
+        "membrane.h",
+    ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":elasticity_impl",
+        "//:mujoco_hdrs",
+    ],
+)
+
+cc_library(
     name = "register",
     srcs = [
         "register.cc",
     ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":cable",
+        ":membrane",
         ":shell",
+        ":solid",
         "//:mujoco_hdrs",
     ],
     alwayslink = True,

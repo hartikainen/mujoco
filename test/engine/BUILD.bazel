@@ -22,7 +22,6 @@ cc_test(
         "engine_ray_test.cc",
         "engine_sensor_test.cc",
         "engine_solver_test.cc",
-        "engine_sort_test.cc",
         "engine_support_test.cc",
         "engine_thread_test.cc",
         "engine_util_blas_test.cc",
@@ -33,7 +32,6 @@ cc_test(
         "engine_util_sparse_test.cc",
         "engine_util_spatial_test.cc",
         "engine_vis_state_test.cc",
-        "engine_vis_visualize_test.cc",
     ],
     copts = [
         "-Wno-dangling-else",
@@ -54,11 +52,8 @@ cc_test(
     ],
     env = PLUGIN_DIR,
     deps = [
-        "//:mujoco",
         "//src/engine:engine_util_container",
-        "//src/engine:engine_util_sparse",
         "//test:fixture",
         "@googletest//:gtest_main",
     ],
-    linkstatic=True,
 )

@@ -10,5 +10,4 @@ cc_test(
         "//test:fixture",
         "@googletest//:gtest_main",
     ],
-    linkstatic=True,
 )

@@ -17,5 +17,4 @@ cc_test(
         "@abseil-cpp//absl/strings:string_view",
         "@googletest//:gtest_main",
     ],
-    linkstatic=True,
 )
