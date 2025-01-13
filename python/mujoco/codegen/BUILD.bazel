@@ -1,5 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary")
-load("@pip_deps//:requirements.bzl", "requirement")
+load("@pypi//:requirements.bzl", "requirement")
 
 package(default_visibility = ["@mujoco//:__subpackages__"])
 
