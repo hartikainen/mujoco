@@ -249,6 +249,15 @@ pybind_extension(
     ],
 )
 
+cc_library(
+    name = "threadpool",
+    srcs = ["threadpool.cc"],
+    hdrs = ["threadpool.h"],
+    deps = [
+        "@abseil-cpp//absl/base:core_headers",
+    ],
+)
+
 pybind_extension(
     name = "_rollout",
     srcs = ["rollout.cc"],
@@ -257,6 +266,7 @@ pybind_extension(
     ],
     deps = [
         ":errors_header",
+        ":threadpool",
         ":raw",
         ":structs_header",
         "//:mujoco_hdrs",
