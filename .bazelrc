@@ -1,6 +1,5 @@
 # don't use bzlmod yet.
-common --enable_workspace=true
-common --enable_bzlmod=false
+common --enable_bzlmod=true
 
 # use c++20 by default
 build --cxxopt=-std=c++20
