@@ -1,4 +1,4 @@
-load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//devtools/bbcp/builddefs:build_defs.bzl", "generated_file")
 load("//devtools/python/blaze:pybind.bzl", "pybind_extension", "pybind_library")
 load("@pip_deps//:requirements.bzl", "requirement")
