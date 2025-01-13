@@ -1,5 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("@pip_deps//:requirements.bzl", "requirement")
+load("@pypi//:requirements.bzl", "requirement")
 
 # This genrule is non-hermetic and uses the system-installed clang.
 genrule(

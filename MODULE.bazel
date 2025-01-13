@@ -36,4 +36,4 @@ pip.parse(
         # "requirements.macos_arm64.txt": "osx_*",
     },
 )
-use_repo(pip, "pip_deps")
+use_repo(pip, "pypi")
