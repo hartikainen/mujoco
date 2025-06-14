@@ -32,7 +32,6 @@ cc_test(
         "engine_util_solve_test.cc",
         "engine_util_sparse_test.cc",
         "engine_util_spatial_test.cc",
-        "engine_vis_state_test.cc",
         "engine_vis_visualize_test.cc",
     ],
     copts = [

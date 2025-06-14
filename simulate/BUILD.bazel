@@ -56,7 +56,6 @@ cc_binary(
     deps = [
         ":simulate_lib",
         "//plugin/actuator:register",
-        "//plugin/elasticity:register",
         "//plugin/sdf:register",
         "//plugin/sensor:touch_grid",
     ],

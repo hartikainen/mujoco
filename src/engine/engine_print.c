@@ -213,7 +213,7 @@ static const char* memorySize(size_t nbytes) {
   int k = 1024;
 
   if (nbytes < k) {
-    snprintf(message, sizeof(message), "%5zu bytes", nbytes);
+    snprintf(message, sizeof(message), "%5ld bytes", nbytes);
   } else if (nbytes < k*k) {
     snprintf(message, sizeof(message), "%5.1f KB", (double)nbytes / k);
   } else if (nbytes < k*k*k) {

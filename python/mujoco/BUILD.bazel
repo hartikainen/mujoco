@@ -220,6 +220,23 @@ pybind_library(
     ],
 )
 
+# TODO(hartikainen): There might be some details incorrect here.
+pybind_library(
+    name = "specs_wrapper_header",
+    hdrs = [
+        "specs_wrapper.h",
+    ],
+    copts = [
+        "-Wno-sign-compare",
+    ],
+    deps = [
+        ":errors_header",
+        ":raw",
+        ":structs_header",
+        "//:mujoco_hdrs",
+    ],
+)
+
 pybind_extension(
     name = "_structs",
     srcs = [
@@ -302,11 +319,13 @@ pybind_extension(
     ],
 )
 
+# TODO(hartikainen): There might be some details incorrect here.
 pybind_extension(
     name = "_specs",
     srcs = [
         "specs.cc",
         "specs.cc.inc",
+        "specs_wrapper.cc",
     ],
     copts = [
         "-Wno-sign-compare",
@@ -319,6 +338,7 @@ pybind_extension(
         ":errors_header",
         ":raw",
         ":structs_header",
+        ":specs_wrapper_header",
         "//:mujoco_hdrs",
         "@eigen",
     ],

@@ -23,7 +23,6 @@ names = [
         ],
         tags = ["manual"],
         deps = [
-            "//plugin/elasticity:register",
             "//test:fixture",
             "@abseil-cpp//absl/base:core_headers",
             "@google_benchmark//:benchmark_main",

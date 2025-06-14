@@ -22,7 +22,6 @@ mj_cc_library(
         "engine_solver.c",
         "engine_support.c",
         "engine_vis_interact.c",
-        "engine_vis_state.c",
         "engine_vis_visualize.c",
     ],
     hdrs = [
@@ -42,7 +41,6 @@ mj_cc_library(
         "engine_solver.h",
         "engine_support.h",
         "engine_vis_interact.h",
-        "engine_vis_state.h",
         "engine_vis_visualize.h",
     ],
     copts = [
