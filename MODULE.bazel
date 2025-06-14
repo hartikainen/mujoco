@@ -9,6 +9,21 @@ bazel_dep(name = "aspect_bazel_lib", version = "2.10.0")
 bazel_dep(name = "buildifier_prebuilt", version = "7.3.1", dev_dependency = True)
 bazel_dep(name = "platforms", version = "0.0.11")
 
+# TODO(hartikainen) move transitive dependencies elsewhere?
+bazel_dep(name = "ccd", version = "2.1.0")
+bazel_dep(name = "cereal", version = "1.3.2")
+bazel_dep(name = "glfw", version = "3.3.9")
+bazel_dep(name = "glm", version = "0.9.9.8")
+bazel_dep(name = "spdlog", version = "1.15.0")
+bazel_dep(name = "tinyobjloader", version = "2.0.0-rc1")
+bazel_dep(name = "abseil-cpp", version = "20240722.0.bcr.2")
+bazel_dep(name = "qhull", version = "8.0.2")
+bazel_dep(name = "tinyxml2", version = "10.0.0")
+bazel_dep(name = "googletest", version = "1.15.2")
+bazel_dep(name = "google_benchmark", version = "1.8.5")
+bazel_dep(name = "eigen", version = "4.0.0-20241125.bcr.1")
+bazel_dep(name = "bazel_skylib", version = "1.7.1")
+
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(python_version = "3.12")
 python.toolchain(
@@ -42,3 +57,128 @@ pip.parse(
     },
 )
 use_repo(pip, "pypi")
+
+# GLFW_VERSION = "3.4"
+# bazel_dep(name = "glfw", version = "0.0.0")
+# archive_override(
+#     module_name = "glfw",
+#     # name = "libglfw3",
+#     build_file = "@//third_party/glfw:BUILD.bazel",
+#     patch_cmds = [
+#         """cat <<EOF >MODULE.bazel
+# module(name = "glfw")
+# bazel_dep(name = "bazel_skylib", version="1.7.1")
+# bazel_dep(name = "rules_cc", version="0.1.1")
+# EOF""",
+#     ],
+#     integrity = "sha256-wDjTQgAjTQcfrpNFvEVeSo8vVEq2AVB2XXcE4I89rAE=",
+#     strip_prefix = "glfw-{0}".format(GLFW_VERSION),
+#     urls = ["https://github.com/glfw/glfw/archive/refs/tags/{0}.tar.gz".format(GLFW_VERSION)],
+# )
+
+# LIBGLVND_VERSION = "1.2.0"
+# bazel_dep(name = "libglvnd", version = "0.0.0")
+# archive_override(
+#     module_name = "libglvnd",
+#     build_file = "@//third_party/libglvnd:BUILD.bazel",
+#     patch_cmds = [
+#         """cat <<EOF >MODULE.bazel
+# module(name = "libglvnd")
+# bazel_dep(name = "bazel_skylib", version="1.7.1")
+# bazel_dep(name = "rules_cc", version="0.1.1")
+# EOF""",
+#     ],
+#     integrity = "sha256-N5gb0zICYfFBQLiu9uLmwIx+dbapjc6gNGcAF/PxMSo=",
+#     strip_prefix = "libglvnd-{0}".format(LIBGLVND_VERSION),
+#     urls = ["https://github.com/NVIDIA/libglvnd/archive/refs/tags/v{0}.tar.gz".format(LIBGLVND_VERSION)],
+# )
+
+SDFLIB_VERSION = "1927bee6bb8225258a39c8cbf14e18a4d50409ae"
+bazel_dep(name = "sdflib", version = "0.0.0")
+archive_override(
+    # NOTE(hartikainen): valid names must 1) only contain lowercase letters (a-z), digits (0-9), dots (.), hyphens (-), and underscores (_); 2) begin with a lowercase letter; 3) end with a lowercase letter or digit.
+    module_name = "sdflib",
+    build_file = "@//third_party/SdfLib:BUILD.bazel2",
+    patch_cmds = [
+        """cat <<EOF >MODULE.bazel
+module(name = "sdflib")
+bazel_dep(name = "bazel_skylib", version="1.7.1")
+bazel_dep(name = "cereal", version = "1.3.2")
+bazel_dep(name = "glm", version = "0.9.9.8")
+bazel_dep(name = "rules_cc", version="0.1.1")
+bazel_dep(name = "spdlog", version = "1.15.0")
+EOF""",
+    ],
+    integrity = "sha256-/2CBlU0FBB9fWDvmnfyXSacQMNjaZLS5p1djUJEbgGo=",
+    strip_prefix = "SdfLib-{0}".format(SDFLIB_VERSION),
+    urls = ["https://github.com/UPC-ViRVIG/SdfLib/archive/{0}.tar.gz".format(SDFLIB_VERSION)],
+)
+
+LODEPNG_VERSION = "b4ed2cd7ecf61d29076169b49199371456d4f90b"
+bazel_dep(name = "lodepng", version = "0.0.0")
+archive_override(
+    module_name = "lodepng",
+    build_file = "@//third_party/lodepng:BUILD.bazel",
+    patch_cmds = [
+        """cat <<EOF >MODULE.bazel
+module(name = "lodepng")
+bazel_dep(name = "bazel_skylib", version="1.7.1")
+bazel_dep(name = "rules_cc", version="0.1.1")
+EOF""",
+    ],
+    integrity = "sha256-tn5Ga6ZZwHrHddB9vZevMZzeRJzhSr7Zrllt8p2IhgM=",
+    strip_prefix = "lodepng-{0}".format(LODEPNG_VERSION),
+    urls = ["https://github.com/lvandeve/lodepng/archive/{0}.tar.gz".format(LODEPNG_VERSION)],
+)
+
+MARCHING_CUBE_CPP_VERSION = "f03a1b3ec29b1d7d865691ca8aea4f1eb2c2873d"
+bazel_dep(name = "marchingcubecpp", version = "0.0.0")
+archive_override(
+    module_name = "marchingcubecpp",
+    build_file = "@mujoco//tools/workspace/MarchingCubeCpp:BUILD.bazel",
+    patch_cmds = [
+        """cat <<EOF >MODULE.bazel
+module(name = "marchingcubecpp")
+bazel_dep(name = "bazel_skylib", version="1.7.1")
+bazel_dep(name = "rules_cc", version="0.1.1")
+EOF""",
+    ],
+    integrity = "sha256-InwQss/+iGRUuSoOnvnwyejgAdAOoVbMN8j8QwVcnKY=",
+    strip_prefix = "MarchingCubeCpp-{0}".format(MARCHING_CUBE_CPP_VERSION),
+    urls = ["https://github.com/aparis69/MarchingCubeCpp/archive/{0}.tar.gz".format(MARCHING_CUBE_CPP_VERSION)],
+)
+
+# bazel_dep(name = "MarchingCubeCpp", version = "-")
+# bazel_dep(name = "libccd", version = "-")
+# bazel_dep(name = "lodepng", version = "-")
+# bazel_dep(name = "SdfLib", version = "-")
+# bazel_dep(name = "libglvnd", version = "-")
+# bazel_dep(name = "libglfw3", version = "-")
+
+# http_archive(
+#     name = "glfw",
+#     build_file = "@//third_party/glfw:BUILD",
+#     integrity = "sha256-T/GKM3faRlOGN02BJ+e3NJtoUojLjhcSL34Refc3adU=",
+#     strip_prefix = "glfw-{0}".format(GLFW_VERSION),
+#     urls = [
+#         "https://github.com/glfw/glfw/archive/{0}.tar.gz".format(GLFW_VERSION)
+#     ],
+# )
+
+# bazel_dep(name = "glew", version = "2.2.0")
+    # deb_package(
+    #     name = name,
+    #     urls = [
+    #         "http://mirrors.kernel.org/ubuntu/pool/universe/g/glfw3/libglfw3_3.3.6-1_amd64.deb",
+    #         "http://mirrors.kernel.org/ubuntu/pool/universe/g/glfw3/libglfw3-dev_3.3.6-1_amd64.deb",
+    #     ],
+    #     sha256s = [
+    #         "a7fe08d4ded1c376e8b008fdeef220b8a0335258a05c542982424cdb43b61af3",
+    #         "2b2a68725a34dd69bcce045282806f1d1ffa6c43376aa1023058683f51a31b02",
+    #     ],
+    #     data_archives = [
+    #         "data.tar.zst",
+    #         "data.tar.zst",
+    #     ],
+    #     build_file = "@mujoco//tools/workspace/libglfw3:package.BUILD.bazel",
+    # )
