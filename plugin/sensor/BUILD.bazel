@@ -5,11 +5,13 @@ package(default_visibility = ["@mujoco//:__subpackages__"])
 mj_cc_library(
     name = "touch_grid",
     srcs = [
-        "sensor.cc",
+        "register.cc",
         "touch_grid.cc",
+        "touch_stress.cc",
     ],
     hdrs = [
         "touch_grid.h",
+        "touch_stress.h",
     ],
     deps = [
         "//:mujoco_hdrs",

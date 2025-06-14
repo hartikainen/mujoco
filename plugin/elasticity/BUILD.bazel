@@ -34,22 +34,6 @@ mj_cc_library(
 )
 
 mj_cc_library(
-    name = "shell",
-    srcs = [
-        "shell.cc",
-    ],
-    hdrs = [
-        "shell.h",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = [
-        ":elasticity_impl",
-        "//:mujoco_hdrs",
-    ],
-    alwayslink = True,
-)
-
-mj_cc_library(
     name = "register",
     srcs = [
         "register.cc",
@@ -57,7 +41,6 @@ mj_cc_library(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         ":cable",
-        ":shell",
         "//:mujoco_hdrs",
     ],
     alwayslink = True,
