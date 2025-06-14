@@ -42,6 +42,7 @@ void mjs_defaultSpec(mjSpec* spec) {
   spec->compiler.usethread = 1;
   spec->compiler.inertiafromgeom = mjINERTIAFROMGEOM_AUTO;
   spec->compiler.inertiagrouprange[1] = mjNGROUP-1;
+  spec->compiler.saveinertial = 0;
   mj_defaultLROpt(&spec->compiler.LRopt);
 
   // engine data
@@ -202,6 +203,8 @@ void mjs_defaultLight(mjsLight* light) {
   // intrinsics
   light->castshadow = 1;
   light->bulbradius = 0.02;
+  light->intensity = 0.0;
+  light->range = 10.0;
   light->active = 1;
   light->attenuation[0] = 1;
   light->cutoff = 45;
@@ -229,7 +232,7 @@ void mjs_defaultFlex(mjsFlex* flex) {
   // set other defaults
   flex->dim = 2;
   flex->radius = 0.005;
-  flex->internal = 1;
+  flex->internal = 0;
   flex->selfcollide = mjFLEXSELF_AUTO;
   flex->activelayers = 1;
   flex->rgba[0] = flex->rgba[1] = flex->rgba[2] = 0.5f;
@@ -270,6 +273,7 @@ void mjs_defaultSkin(mjsSkin* skin) {
 void mjs_defaultTexture(mjsTexture* texture) {
   memset(texture, 0, sizeof(mjsTexture));
   texture->type = mjTEXTURE_CUBE;
+  texture->colorspace = mjCOLORSPACE_AUTO;
   texture->rgb1[0] = texture->rgb1[1] = texture->rgb1[2] = 0.8;
   texture->rgb2[0] = texture->rgb2[1] = texture->rgb2[2] = 0.5;
   texture->random = 0.01;
@@ -287,8 +291,8 @@ void mjs_defaultMaterial(mjsMaterial* material) {
   material->texrepeat[0] = material->texrepeat[1] = 1;
   material->specular = 0.5;
   material->shininess = 0.5;
-  material->metallic = 1.;
-  material->roughness = 1.0;
+  material->metallic = -1.0;
+  material->roughness = -1.0;
   material->rgba[0] = material->rgba[1] = material->rgba[2] = material->rgba[3] = 1;
 }
 
@@ -403,4 +407,3 @@ void mjs_defaultKey(mjsKey* key) {
 void mjs_defaultPlugin(mjsPlugin* plugin) {
   memset(plugin, 0, sizeof(mjsPlugin));
 }
-

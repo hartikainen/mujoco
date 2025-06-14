@@ -928,7 +928,7 @@ int mj_sizeModel(const mjModel* m) {
 // construct sparse representation of dof-dof matrix
 static void makeDofDofSparse(const mjModel* m, mjData* d,
                              int* rownnz, int* rowadr,  int* diag, int* colind,
-                             int reduced) {
+                             int reduced, int upper) {
   int nv = m->nv;
 
   // no dofs, nothing to do
@@ -947,13 +947,13 @@ static void makeDofDofSparse(const mjModel* m, mjData* d,
     rownnz[i]++;
 
     // process below diagonal unless reduced and dof is simple
-    if (!reduced || !m->dof_simplenum[i]) {
+    if (!(reduced && m->dof_simplenum[i])) {
       while ((j = m->dof_parentid[j]) >= 0) {
         // both reduced and non-reduced have lower triangle
         rownnz[i]++;
 
-        // only non-reduced has upper triangle
-        if (!reduced) rownnz[j]++;
+        // add upper triangle if requested
+        if (upper) rownnz[j]++;
       }
     }
   }
@@ -972,14 +972,14 @@ static void makeDofDofSparse(const mjModel* m, mjData* d,
     colind[rowadr[i] + remaining[i]] = i;
 
     // process below diagonal unless reduced and dof is simple
-    if (!reduced || !m->dof_simplenum[i]) {
+    if (!(reduced && m->dof_simplenum[i])) {
       int j = i;
       while ((j = m->dof_parentid[j]) >= 0) {
         remaining[i]--;
         colind[rowadr[i] + remaining[i]] = j;
 
-        // only non-reduced has upper triangle
-        if (!reduced) {
+        // add upper triangle if requested
+        if (upper) {
           remaining[j]--;
           colind[rowadr[j] + remaining[j]] = i;
         }
@@ -995,7 +995,8 @@ static void makeDofDofSparse(const mjModel* m, mjData* d,
   }
 
   // check total nnz; SHOULD NOT OCCUR
-  if (rowadr[nv - 1] + rownnz[nv - 1] != (reduced ? m->nC : m->nD)) {
+  int expected_nnz = upper ? m->nD : (reduced ? m->nC : m->nM);
+  if (rowadr[nv - 1] + rownnz[nv - 1] != expected_nnz) {
     mjERROR("sum of rownnz different from expected");
   }
 
@@ -1131,18 +1132,20 @@ static void checkDBSparse(const mjModel* m, mjData* d) {
 
 
 
-// integer valued dst[D or C] = src[M], handle different sparsity representations
+// integer valued dst[D or C or M] = src[M (legacy)], handle different sparsity representations
 static void copyM2Sparse(const mjModel* m, mjData* d, int* dst, const int* src,
-                         int reduced) {
+                         int reduced, int upper) {
   int nv = m->nv;
   const int* rownnz;
   const int* rowadr;
-  if (reduced) {
-    rownnz = d->C_rownnz;
-    rowadr = d->C_rowadr;
-  } else {
+  if (reduced && !upper) {
+    rownnz = d->M_rownnz;
+    rowadr = d->M_rowadr;
+  } else if (!reduced && upper) {
     rownnz = d->D_rownnz;
     rowadr = d->D_rowadr;
+  } else {
+    mjERROR("unsupported sparsity structure (reduced + upper)");
   }
 
   mj_markStack(d);
@@ -1160,14 +1163,14 @@ static void copyM2Sparse(const mjModel* m, mjData* d, int* dst, const int* src,
     adr++;
 
     // process below diagonal unless reduced and dof is simple
-    if (!reduced || !m->dof_simplenum[i]) {
+    if (!(reduced && m->dof_simplenum[i])) {
       int j = i;
       while ((j = m->dof_parentid[j]) >= 0) {
         remaining[i]--;
         dst[rowadr[i] + remaining[i]] = src[adr];
 
-        // only non-reduced has upper triangle
-        if (!reduced) {
+        // add upper triangle if requested
+        if (upper) {
           remaining[j]--;
           dst[rowadr[j] + remaining[j]] = src[adr];
         }
@@ -1213,8 +1216,8 @@ static void copyD2MSparse(const mjModel* m, const mjData* d, int* dst, const int
 
 
 
-// construct index mappings between M <-> D and M -> C
-static void makeDofDofmap(const mjModel* m, mjData* d) {
+// construct index mappings between M <-> D, M -> C, M (legacy) -> M (CSR)
+static void makeDofDofmaps(const mjModel* m, mjData* d) {
   int nM = m->nM, nC = m->nC, nD = m->nD;
   mj_markStack(d);
 
@@ -1222,7 +1225,7 @@ static void makeDofDofmap(const mjModel* m, mjData* d) {
   int* M = mjSTACKALLOC(d, nM, int);
   for (int i=0; i < nM; i++) M[i] = i;
   for (int i=0; i < nD; i++) d->mapM2D[i] = -1;
-  copyM2Sparse(m, d, d->mapM2D, M, /*reduced=*/0);
+  copyM2Sparse(m, d, d->mapM2D, M, /*reduced=*/0, /*upper=*/1);
 
   // check that all indices are filled in
   for (int i=0; i < nD; i++) {
@@ -1245,12 +1248,12 @@ static void makeDofDofmap(const mjModel* m, mjData* d) {
   }
 
   // make mapM2C
-  for (int i=0; i < nC; i++) d->mapM2C[i] = -1;
-  copyM2Sparse(m, d, d->mapM2C, M, /*reduced=*/1);
+  for (int i=0; i < nC; i++) d->mapM2M[i] = -1;
+  copyM2Sparse(m, d, d->mapM2M, M, /*reduced=*/1, /*upper=*/0);
 
   // check that all indices are filled in
   for (int i=0; i < nC; i++) {
-    if (d->mapM2C[i] < 0) {
+    if (d->mapM2M[i] < 0) {
       mjERROR("unassigned index in mapM2C");
     }
   }
@@ -1412,8 +1415,9 @@ mjData* mj_makeData(const mjModel* m) {
 
 
 
-// copy mjData, if dest==NULL create new data
-mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
+// copy mjData, if dest==NULL create new data;
+// flg_all  1: copy all fields,  0: skip fields not required for visualization
+mjData* mj_copyDataVisual(mjData* dest, const mjModel* m, const mjData* src, int flg_all) {
   void* save_buffer;
   void* save_arena;
 
@@ -1458,10 +1462,25 @@ mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
   // copy buffer
   {
     MJDATA_POINTERS_PREAMBLE(m)
-    #define X(type, name, nr, nc)  \
-      memcpy((char*)dest->name, (const char*)src->name, sizeof(type)*(m->nr)*nc);
-    MJDATA_POINTERS
-    #undef X
+    if (flg_all) {
+      #define X(type, name, nr, nc)  \
+        memcpy((char*)dest->name, (const char*)src->name, sizeof(type)*(m->nr)*nc);
+      MJDATA_POINTERS
+      #undef X
+    } else {
+      // redefine XNV to nothing
+      #undef XNV
+      #define XNV(type, name, nr, nc)
+
+      #define X(type, name, nr, nc)  \
+        memcpy((char*)dest->name, (const char*)src->name, sizeof(type)*(m->nr)*nc);
+      MJDATA_POINTERS
+      #undef X
+
+      // redefine XNV to be the same as X
+      #undef XNV
+      #define XNV X
+    }
   }
 
 
@@ -1471,7 +1490,8 @@ mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
   #undef MJ_M
   #define MJ_M(n) (m->n)
 
-  #define X(type, name, nr, nc)                                                  \
+  if (flg_all) {
+    #define X(type, name, nr, nc)                                                \
     if (src->name) {                                                             \
       dest->name = (type*)((char*)dest->arena + PTRDIFF(src->name, src->arena)); \
       ASAN_UNPOISON_MEMORY_REGION(dest->name, sizeof(type) * nr * nc);           \
@@ -1479,8 +1499,28 @@ mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
     } else {                                                                     \
       dest->name = NULL;                                                         \
     }
-  MJDATA_ARENA_POINTERS
-  #undef X
+    MJDATA_ARENA_POINTERS
+    #undef X
+  } else {
+    // redefine XNV to nothing
+    #undef XNV
+    #define XNV(type, name, nr, nc)
+
+    #define X(type, name, nr, nc)                                                \
+    if (src->name) {                                                             \
+      dest->name = (type*)((char*)dest->arena + PTRDIFF(src->name, src->arena)); \
+      ASAN_UNPOISON_MEMORY_REGION(dest->name, sizeof(type) * nr * nc);           \
+      memcpy((char*)dest->name, (const char*)src->name, sizeof(type) * nr * nc); \
+    } else {                                                                     \
+      dest->name = NULL;                                                         \
+    }
+    MJDATA_ARENA_POINTERS
+    #undef X
+
+    // redefine XNV to be the same as X
+    #undef XNV
+    #define XNV X
+  }
 
   #undef MJ_M
   #define MJ_M(n) n
@@ -1512,6 +1552,14 @@ mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
 }
 
 
+mjData* mj_copyData(mjData* dest, const mjModel* m, const mjData* src) {
+  return mj_copyDataVisual(dest, m, src, /*flg_all=*/1);
+}
+
+
+mjData* mjv_copyData(mjData* dest, const mjModel* m, const mjData* src) {
+  return mj_copyDataVisual(dest, m, src, /*flg_all=*/0);
+}
 
 static void maybe_lock_alloc_mutex(mjData* d) {
   if (d->threadpool != 0) {
@@ -1887,7 +1935,6 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   memset(d->warning, 0, mjNWARNING*sizeof(mjWarningStat));
   memset(d->timer, 0, mjNTIMER*sizeof(mjTimerStat));
   memset(d->solver, 0, mjNSOLVER*mjNISLAND*sizeof(mjSolverStat));
-  d->solver_nisland = 0;
   mju_zeroInt(d->solver_niter, mjNISLAND);
   mju_zeroInt(d->solver_nnz, mjNISLAND);
   mju_zero(d->solver_fwdinv, 2);
@@ -1901,6 +1948,7 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   d->nJ = 0;
   d->nA = 0;
   d->nisland = 0;
+  d->nidof = 0;
 
   // clear global properties
   d->time = 0;
@@ -1965,15 +2013,18 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
   // construct sparse matrix representations
   if (m->body_dofadr) {
     // make D
-    makeDofDofSparse(m, d, d->D_rownnz, d->D_rowadr, d->D_diag, d->D_colind, /*reduced=*/0);
+    makeDofDofSparse(m, d, d->D_rownnz, d->D_rowadr, d->D_diag, d->D_colind,
+                     /*reduced=*/0, /*upper=*/1);
 
     // make B, check D and B
     makeBSparse(m, d);
     checkDBSparse(m, d);
 
     // make C
-    makeDofDofSparse(m, d, d->C_rownnz, d->C_rowadr, NULL, d->C_colind, /*reduced=*/1);
-    makeDofDofmap(m, d);
+    makeDofDofSparse(m, d, d->M_rownnz, d->M_rowadr, NULL, d->M_colind, /*reduced=*/1, /*upper=*/0);
+
+    // make index mappings: mapM2D, mapD2M, mapM2C, mapM2M
+    makeDofDofmaps(m, d);
   }
 
   // restore pluginstate and plugindata
@@ -1993,6 +2044,9 @@ static void _resetData(const mjModel* m, mjData* d, unsigned char debug_value) {
       }
     }
   }
+
+  // copy signature from model
+  d->signature = m->signature;
 }
 
 
@@ -2055,6 +2109,7 @@ static int sensorSize(mjtSensor sensor_type, int sensor_dim) {
   case mjSENS_ACTUATORVEL:
   case mjSENS_ACTUATORFRC:
   case mjSENS_JOINTACTFRC:
+  case mjSENS_TENDONACTFRC:
   case mjSENS_JOINTLIMITPOS:
   case mjSENS_JOINTLIMITVEL:
   case mjSENS_JOINTLIMITFRC:
@@ -2116,8 +2171,10 @@ static int sensorSize(mjtSensor sensor_type, int sensor_dim) {
 //   -2: invalid objtype
 static int numObjects(const mjModel* m, mjtObj objtype) {
   switch (objtype) {
+  case mjOBJ_DEFAULT:
   case mjOBJ_FRAME:
   case mjOBJ_UNKNOWN:
+  case mjOBJ_MODEL:
     return -1;
   case mjOBJ_BODY:
   case mjOBJ_XBODY:
@@ -2215,11 +2272,8 @@ const char* mj_validateReferences(const mjModel* m) {
   X(mesh_bvhadr,        nmesh,          nbvh          , m->mesh_bvhnum         ) \
   X(mesh_graphadr,      nmesh,          nmeshgraph    , 0                      ) \
   X(mesh_polyadr,       nmesh,          nmeshpoly     , m->mesh_polynum        ) \
-  X(mesh_polynormal,    nmeshpoly*3,    nmeshpoly*3   , 0                      ) \
   X(mesh_polyvertadr,   nmeshpoly,      nmeshpolyvert , m->mesh_polyvertnum    ) \
-  X(mesh_polyvert,      nmeshpolyvert,  nmeshpolyvert , 0                      ) \
   X(mesh_polymapadr,    nmeshvert,      nmeshpolymap  , m->mesh_polymapnum     ) \
-  X(mesh_polymap,       nmeshpolymap,   nmeshpolymap  , 0                      ) \
   X(flex_vertadr,       nflex,          nflexvert     , m->flex_vertnum        ) \
   X(flex_edgeadr,       nflex,          nflexedge     , m->flex_edgenum        ) \
   X(flex_elemadr,       nflex,          nflexelem     , m->flex_elemnum        ) \
@@ -2352,7 +2406,7 @@ const char* mj_validateReferences(const mjModel* m) {
     }
   }
   for (int i=0; i < m->ntex; i++) {
-    int tex_adr = m->tex_adr[i] + 3*m->tex_height[i]*m->tex_width[i];
+    int tex_adr = m->tex_adr[i] + m->tex_nchannel[i]*m->tex_height[i]*m->tex_width[i];
     if (tex_adr > m->ntexdata || m->tex_adr[i] < 0) {
       return "Invalid model: tex_adr out of bounds.";
     }

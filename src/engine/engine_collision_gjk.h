@@ -15,6 +15,9 @@
 #ifndef MUJOCO_SRC_ENGINE_ENGINE_COLLISION_GJK_H_
 #define MUJOCO_SRC_ENGINE_ENGINE_COLLISION_GJK_H_
 
+#include <float.h>
+#include <stddef.h>
+
 #include <mujoco/mjexport.h>
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtnum.h>
@@ -25,15 +28,31 @@
 extern "C" {
 #endif
 
-// max sides of a face of mesh supported for multiple contacts
-#define mjMAX_SIDES 10
+// numerical max limit
+#ifndef mjUSESINGLE
+  #define mjMAX_LIMIT DBL_MAX
+#else
+  #define mjMAX_LIMIT FLT_MAX
+#endif
+
+// max number of EPA iterations
+#define mjMAX_EPA_ITERATIONS 170
+
+// tolerance for normal alignment of two faces (cosine of 1.6e-3)
+#define mjFACE_TOL 0.99999872
+
+// tolerance for edge-face alignment (sine of 1.6e-3)
+#define mjEDGE_TOL 0.00159999931
+
+// max number of supported vertices in a polygon face of a mesh
+#define mjMAX_POLYVERT 150
 
 // Status of an EPA run
 typedef enum {
   mjEPA_NOCONTACT           = -1,
   mjEPA_SUCCESS             = 0,
   mjEPA_P2_INVALID_FACES,
-  mjEPA_P2_MISSING_ORIGIN,
+  mjEPA_P2_NONCONVEX,
   mjEPA_P2_ORIGIN_ON_FACE,
   mjEPA_P3_BAD_NORMAL,
   mjEPA_P3_INVALID_V4,
@@ -54,10 +73,17 @@ typedef struct {
 
 // configuration for convex collision detection
 typedef struct {
-  int max_iterations;   // the maximum number of iterations for GJK and EPA
-  mjtNum tolerance;     // tolerance used by GJK and EPA
-  int max_contacts;     // set to max number of contact points to recover
-  mjtNum dist_cutoff;   // set to max geom distance to recover
+  int max_iterations;  // the maximum number of iterations for GJK and EPA
+  mjtNum tolerance;    // tolerance used by GJK and EPA
+  int max_contacts;    // set to max number of contact points to recover
+  mjtNum dist_cutoff;  // set to max geom distance to recover
+  void* context;       // opaque data pointer passed to callbacks
+
+  // callback to allocate memory for polytope (only needed for penetration recovery)
+  void*(*alloc)(void* context, size_t nbytes);
+
+  // callback to free memory from alloc callback
+  void(*free)(void* context, void* buffer);
 } mjCCDConfig;
 
 // data produced from running GJK and EPA

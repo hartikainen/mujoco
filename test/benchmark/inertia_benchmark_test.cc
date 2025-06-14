@@ -20,6 +20,7 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mujoco.h>
 #include "src/engine/engine_core_smooth.h"
+#include "src/engine/engine_util_misc.h"
 #include "test/fixture.h"
 
 namespace mujoco {
@@ -47,9 +48,7 @@ static void BM_solve(benchmark::State& state, SolveType type) {
 
   // M: mass matrix in CSR format
   mjtNum* M = mj_stackAllocNum(d, m->nC);
-  for (int i=0; i < m->nC; i++) {
-    M[i] = d->qM[d->mapM2C[i]];
-  }
+  mju_gather(M, d->qM, d->mapM2M, m->nC);
 
   // LDlegacy: legacy LD matrix (size nM)
   mjtNum* LDlegacy = mj_stackAllocNum(d, m->nM);
@@ -74,9 +73,9 @@ static void BM_solve(benchmark::State& state, SolveType type) {
         case SolveType::kCsr:
           mju_copy(d->qLD, M, m->nC);
           mj_factorI(d->qLD, d->qLDiagInv, m->nv,
-                     d->C_rownnz, d->C_rowadr, m->dof_simplenum, d->C_colind);
+                     d->M_rownnz, d->M_rowadr, d->M_colind);
           mj_solveLD(res, d->qLD, d->qLDiagInv, m->nv, 1,
-                     d->C_rownnz, d->C_rowadr, m->dof_simplenum, d->C_colind);
+                     d->M_rownnz, d->M_rowadr, d->M_colind);
       }
     }
   }

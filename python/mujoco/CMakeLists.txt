@@ -84,7 +84,7 @@ if(NOT TARGET mujoco)
     if(MUJOCO_FRAMEWORK)
       message("MuJoCo framework is at ${MUJOCO_FRAMEWORK}/mujoco.framework")
       set(MUJOCO_LIBRARY
-          ${MUJOCO_FRAMEWORK}/mujoco.framework/Versions/A/libmujoco.3.2.8.dylib
+          ${MUJOCO_FRAMEWORK}/mujoco.framework/Versions/A/libmujoco.3.3.4.dylib
       )
       target_compile_options(mujoco INTERFACE -F${MUJOCO_FRAMEWORK})
     endif()
@@ -92,7 +92,7 @@ if(NOT TARGET mujoco)
 
   if(NOT MUJOCO_FRAMEWORK)
     find_library(
-      MUJOCO_LIBRARY mujoco mujoco.3.2.8 HINTS ${MUJOCO_LIBRARY_DIR} REQUIRED
+      MUJOCO_LIBRARY mujoco mujoco.3.3.4 HINTS ${MUJOCO_LIBRARY_DIR} REQUIRED
     )
     find_path(MUJOCO_INCLUDE mujoco/mujoco.h HINTS ${MUJOCO_INCLUDE_DIR} REQUIRED)
     message("MuJoCo is at ${MUJOCO_LIBRARY}")
@@ -140,7 +140,7 @@ findorfetch(
   GIT_REPO
   https://github.com/abseil/abseil-cpp
   GIT_TAG
-  4447c7562e3bc702ade25105912dce503f0c4010 # LTS 20240722.0
+  bc257a88f7c1939f24e0379f14a3589e926c950c # LTS 20250512.0
   TARGETS
   ${MUJOCO_PYTHON_ABSL_TARGETS}
   EXCLUDE_FROM_ALL
@@ -173,7 +173,7 @@ findorfetch(
   GIT_REPO
   https://gitlab.com/libeigen/eigen
   GIT_TAG
-  7f2377859377da6f22152015c28b12c04752af77
+  d0b490ee091629068e0c11953419eb089f9e6bb2
   TARGETS
   Eigen3::Eigen
   EXCLUDE_FROM_ALL
@@ -277,6 +277,25 @@ target_link_libraries(
             mujoco
             raw
 )
+
+add_library(structs_wrappers STATIC
+  structs_wrappers.cc
+  serialization.h
+  indexers.cc
+)
+target_include_directories(structs_wrappers PRIVATE ${Python3_INCLUDE_DIRS})
+target_link_libraries(
+  structs_wrappers
+  PRIVATE absl::flat_hash_map
+          absl::span
+          crossplatform
+          mujoco
+          raw
+          structs_header
+          pybind11::headers
+          Eigen3::Eigen
+)
+
 
 add_library(functions_header INTERFACE)
 target_sources(functions_header INTERFACE functions.h)
@@ -403,6 +422,7 @@ target_link_libraries(
           func_wrap
           function_traits
           structs_header
+          structs_wrappers
 )
 
 if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/specs.cc.inc)
@@ -417,6 +437,8 @@ endif()
 mujoco_pybind11_module(
   _specs
   specs.cc
+  specs_wrapper.h
+  specs_wrapper.cc
   specs.cc.inc
 )
 target_link_libraries(

@@ -91,9 +91,9 @@ static void makeLabel(const mjModel* m, mjtObj type, int id, char* label) {
 
 // assign pseudo-random rgba to constraint island using Halton sequence
 static void islandColor(float rgba[4], int islanddofadr) {
-  rgba[0] = 0.1f + 0.8f*mju_Halton(islanddofadr + 1, 2);
-  rgba[1] = 0.1f + 0.8f*mju_Halton(islanddofadr + 1, 3);
-  rgba[2] = 0.1f + 0.8f*mju_Halton(islanddofadr + 1, 5);
+  rgba[0] = 0.1f + 0.9f*mju_Halton(islanddofadr + 1, 2);
+  rgba[1] = 0.1f + 0.9f*mju_Halton(islanddofadr + 1, 3);
+  rgba[2] = 0.1f + 0.9f*mju_Halton(islanddofadr + 1, 5);
   rgba[3] = 1;
 }
 
@@ -152,7 +152,7 @@ static void addContactGeom(const mjModel* m, mjData* d, const mjtByte* flags,
       // override standard colors if visualizing islands
       if (vopt->flags[mjVIS_ISLAND] && d->nisland && efc_adr >= 0) {
         // set color using island's first dof
-        islandColor(thisgeom->rgba, d->island_dofind[d->island_dofadr[d->efc_island[efc_adr]]]);
+        islandColor(thisgeom->rgba, d->island_dofadr[d->efc_island[efc_adr]]);
       }
 
       // otherwise regular colors (different for included and excluded contacts)
@@ -1344,7 +1344,7 @@ void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
           int island = d->dof_island[m->body_dofadr[weld_id]];
           if (island > -1) {
             // color using island's first dof
-            islandColor(rgba_island, d->island_dofind[d->island_dofadr[island]]);
+            islandColor(rgba_island, d->island_dofadr[island]);
           }
         }
       }
@@ -1835,7 +1835,7 @@ void mjv_addGeoms(const mjModel* m, mjData* d, const mjvOption* vopt,
                 if (d->tendon_efcadr[i] != -1) {
                   // set color using island's first dof
                   int island = d->efc_island[d->tendon_efcadr[i]];
-                  islandColor(rgba_island, d->island_dofind[d->island_dofadr[island]]);
+                  islandColor(rgba_island, d->island_dofadr[island]);
                 }
               }
               setMaterial(m, thisgeom, tendon_matid, rgba, vopt->flags);
@@ -2143,8 +2143,12 @@ void mjv_makeLights(const mjModel* m, const mjData* d, mjvScene* scn) {
     // set default properties
     memset(thislight, 0, sizeof(mjvLight));
     thislight->headlight = 1;
-    thislight->directional = 1;
+    thislight->texid = -1;
+    thislight->type = mjLIGHT_DIRECTIONAL;
     thislight->castshadow = 0;
+    thislight->bulbradius = 0.02;
+    thislight->intensity = 0;
+    thislight->range = 10;
 
     // compute head position and gaze direction in model space
     mjtNum hpos[3], hfwd[3];
@@ -2169,10 +2173,13 @@ void mjv_makeLights(const mjModel* m, const mjData* d, mjvScene* scn) {
 
       // copy properties
       memset(thislight, 0, sizeof(mjvLight));
-      thislight->directional = m->light_directional[i];
+      thislight->type = m->light_type[i];
+      thislight->texid = m->light_texid[i];
       thislight->castshadow = m->light_castshadow[i];
       thislight->bulbradius = m->light_bulbradius[i];
-      if (!thislight->directional) {
+      thislight->intensity = m->light_intensity[i];
+      thislight->range = m->light_range[i];
+      if (thislight->type == mjLIGHT_SPOT) {
         f2f(thislight->attenuation, m->light_attenuation+3*i, 3);
         thislight->exponent = m->light_exponent[i];
         thislight->cutoff = m->light_cutoff[i];
@@ -2527,15 +2534,16 @@ void mjv_updateActiveFlex(const mjModel* m, mjData* d, mjvScene* scn, const mjvO
         if (dim == 2 || m->flex_elemlayer[m->flex_elemadr[f]+e] == opt->flex_layer) {
           // get element data
           const int* edata = m->flex_elem + m->flex_elemdataadr[f] + e*(dim+1);
+          const int* tdata = m->flex_elemtexcoord + m->flex_elemdataadr[f] + e*(dim+1);
 
           // triangles: two faces per element
           if (dim == 2) {
             makeFace(face, normal, radius, vertxpos, nface, edata[0], edata[1], edata[2]);
-            copyTex(texdst, texsrc, nface, edata[0], edata[1], edata[2]);
+            copyTex(texdst, texsrc, nface, tdata[0], tdata[1], tdata[2]);
             nface++;
 
             makeFace(face, normal, radius, vertxpos, nface, edata[0], edata[2], edata[1]);
-            copyTex(texdst, texsrc, nface, edata[0], edata[2], edata[1]);
+            copyTex(texdst, texsrc, nface, tdata[0], tdata[2], tdata[1]);
             nface++;
           }
 
@@ -2543,22 +2551,22 @@ void mjv_updateActiveFlex(const mjModel* m, mjData* d, mjvScene* scn, const mjvO
           else {
             makeFace(face, normal, radius, vertxpos,
                      nface, edata[0], edata[1], edata[2]);
-            copyTex(texdst, texsrc, nface, edata[0], edata[1], edata[2]);
+            copyTex(texdst, texsrc, nface, tdata[0], tdata[1], tdata[2]);
             nface++;
 
             makeFace(face, normal, radius, vertxpos,
                      nface, edata[0], edata[2], edata[3]);
-            copyTex(texdst, texsrc, nface, edata[0], edata[2], edata[3]);
+            copyTex(texdst, texsrc, nface, tdata[0], tdata[2], tdata[3]);
             nface++;
 
             makeFace(face, normal, radius, vertxpos,
                      nface, edata[0], edata[3], edata[1]);
-            copyTex(texdst, texsrc, nface, edata[0], edata[3], edata[1]);
+            copyTex(texdst, texsrc, nface, tdata[0], tdata[3], tdata[1]);
             nface++;
 
             makeFace(face, normal, radius, vertxpos,
                      nface, edata[1], edata[3], edata[2]);
-            copyTex(texdst, texsrc, nface, edata[1], edata[3], edata[2]);
+            copyTex(texdst, texsrc, nface, tdata[1], tdata[3], tdata[2]);
             nface++;
           }
         }
@@ -2598,13 +2606,14 @@ void mjv_updateActiveFlex(const mjModel* m, mjData* d, mjvScene* scn, const mjvO
       if (dim == 2) {
         for (int e=0; e < m->flex_elemnum[f]; e++) {
           const int* edata = m->flex_elem + m->flex_elemdataadr[f] + e*(dim+1);
+          const int* tdata = m->flex_elemtexcoord + m->flex_elemdataadr[f] + e*(dim+1);
           makeSmooth(face, normal, radius, flg_flat, vertnorm, vertxpos,
                      nface, edata[0], edata[1], edata[2]);
-          copyTex(texdst, texsrc, nface, edata[0], edata[1], edata[2]);
+          copyTex(texdst, texsrc, nface, tdata[0], tdata[1], tdata[2]);
           nface++;
           makeSmooth(face, normal, -radius, flg_flat, vertnorm, vertxpos,
                      nface, edata[0], edata[2], edata[1]);
-          copyTex(texdst, texsrc, nface, edata[0], edata[2], edata[1]);
+          copyTex(texdst, texsrc, nface, tdata[0], tdata[2], tdata[1]);
           nface++;
         }
       } else {

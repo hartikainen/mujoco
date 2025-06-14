@@ -28,12 +28,12 @@
 #include <mujoco/mjmodel.h>
 #include <mujoco/mjtnum.h>
 #include <mujoco/mjplugin.h>
-#include <mujoco/mujoco.h>
 #include "cc/array_safety.h"
 #include "engine/engine_crossplatform.h"
 #include "engine/engine_util_errmem.h"
 #include "user/user_flexcomp.h"
 #include <mujoco/mjspec.h>
+#include "user/user_api.h"
 #include "user/user_model.h"
 #include "user/user_objects.h"
 #include "user/user_resource.h"
@@ -135,12 +135,12 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
   }
 
   // check scale
-  if (scale[0]<mjMINVAL || scale[1]<mjMINVAL || scale[2]<mjMINVAL) {
+  if (scale[0] < mjMINVAL || scale[1] < mjMINVAL || scale[2] < mjMINVAL) {
     return comperr(error, "Scale must be larger than mjMINVAL", error_sz);
   }
 
   // check mass and inertia
-  if (mass<mjMINVAL || inertiabox<mjMINVAL) {
+  if (mass < mjMINVAL || inertiabox < mjMINVAL) {
     return comperr(error, "Mass and inertiabox must be larger than mjMINVAL", error_sz);
   }
 
@@ -153,36 +153,36 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
   // type-specific constructor: populate point and element, possibly set dim
   bool res;
   switch (type) {
-  case mjFCOMPTYPE_GRID:
-  case mjFCOMPTYPE_CIRCLE:
-    res = MakeGrid(error, error_sz);
-    break;
+    case mjFCOMPTYPE_GRID:
+    case mjFCOMPTYPE_CIRCLE:
+      res = MakeGrid(error, error_sz);
+      break;
 
-  case mjFCOMPTYPE_BOX:
-  case mjFCOMPTYPE_CYLINDER:
-  case mjFCOMPTYPE_ELLIPSOID:
-    res = MakeBox(error, error_sz);
-    break;
+    case mjFCOMPTYPE_BOX:
+    case mjFCOMPTYPE_CYLINDER:
+    case mjFCOMPTYPE_ELLIPSOID:
+      res = MakeBox(error, error_sz);
+      break;
 
-  case mjFCOMPTYPE_SQUARE:
-  case mjFCOMPTYPE_DISC:
-    res = MakeSquare(error, error_sz);
-    break;
+    case mjFCOMPTYPE_SQUARE:
+    case mjFCOMPTYPE_DISC:
+      res = MakeSquare(error, error_sz);
+      break;
 
-  case mjFCOMPTYPE_MESH:
-    res = MakeMesh(model, error, error_sz);
-    break;
+    case mjFCOMPTYPE_MESH:
+      res = MakeMesh(model, error, error_sz);
+      break;
 
-  case mjFCOMPTYPE_GMSH:
-    res = MakeGMSH(model, error, error_sz);
-    break;
+    case mjFCOMPTYPE_GMSH:
+      res = MakeGMSH(model, error, error_sz);
+      break;
 
-  case mjFCOMPTYPE_DIRECT:
-    res = true;
-    break;
+    case mjFCOMPTYPE_DIRECT:
+      res = true;
+      break;
 
-  default:
-    return comperr(error, "Unknown flexcomp type", error_sz);
+    default:
+      return comperr(error, "Unknown flexcomp type", error_sz);
   }
   if (!res) {
     return false;
@@ -331,7 +331,7 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
           }
         }
       }
-      else if (dflex->dim==3) {
+      else if (dflex->dim == 3) {
         for (int ix=pingridrange[i]; ix <= pingridrange[i+3]; ix++) {
           for (int iy=pingridrange[i+1]; iy <= pingridrange[i+4]; iy++) {
             for (int iz=pingridrange[i+2]; iz <= pingridrange[i+5]; iz++) {
@@ -413,6 +413,7 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
   mjs_setString(pf->name, name.c_str());
   mjs_setInt(pf->elem, element.data(), element.size());
   mjs_setFloat(pf->texcoord, texcoord.data(), texcoord.size());
+  mjs_setInt(pf->elemtexcoord, elemtexcoord.data(), elemtexcoord.size());
   if (!centered) {
     mjs_setDouble(pf->vert, point.data(), point.size());
   }
@@ -458,6 +459,14 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
     else {
       // add new body at vertex coordinates
       mjsBody* pb = mjs_addBody(body, 0);
+
+      // add geom if vertcollide
+      if (dflex->vertcollide) {
+        mjsGeom* geom = mjs_addGeom(pb, 0);
+        geom->type = mjGEOM_SPHERE;
+        geom->size[0] = dflex->radius;
+        geom->group = 4;
+      }
 
       // set frame and inertial
       pb->pos[0] = point[3*i];
@@ -543,6 +552,13 @@ bool mjCFlexcomp::Make(mjsBody* body, char* error, int error_sz) {
           pb->inertia[1] = pb->mass*(2.0*inertiabox*inertiabox)/3.0;
           pb->inertia[2] = pb->mass*(2.0*inertiabox*inertiabox)/3.0;
           pb->explicitinertial = true;
+
+          // add geom if vertcollide
+          if (dflex->vertcollide) {
+            mjsGeom* geom = mjs_addGeom(pb, 0);
+            geom->type = mjGEOM_SPHERE;
+            geom->size[0] = dflex->radius;
+          }
 
           for (int d=0; d < 3; d++) {
             mjsJoint* jnt = mjs_addJoint(pb, 0);
@@ -780,14 +796,14 @@ void mjCFlexcomp::BoxProject(double* pos, int ix, int iy, int iz) {
   };
 
   // box
-  if (type==mjFCOMPTYPE_BOX) {
+  if (type == mjFCOMPTYPE_BOX) {
     pos[0] *= size[0];
     pos[1] *= size[1];
     pos[2] *= size[2];
   }
 
   // cylinder
-  else if (type==mjFCOMPTYPE_CYLINDER) {
+  else if (type == mjFCOMPTYPE_CYLINDER) {
     double L0 = std::max(std::abs(pos[0]), std::abs(pos[1]));
     mjuu_normvec(pos, 2);
     pos[0] *= size[0]*L0;
@@ -796,7 +812,7 @@ void mjCFlexcomp::BoxProject(double* pos, int ix, int iy, int iz) {
   }
 
   // ellipsoid
-  else if (type==mjFCOMPTYPE_ELLIPSOID) {
+  else if (type == mjFCOMPTYPE_ELLIPSOID) {
     mjuu_normvec(pos, 3);
     pos[0] *= size[0];
     pos[1] *= size[1];
@@ -817,7 +833,7 @@ bool mjCFlexcomp::MakeSquare(char* error, int error_sz) {
   }
 
   // do projection
-  if (type==mjFCOMPTYPE_DISC) {
+  if (type == mjFCOMPTYPE_DISC) {
     double size[2] = {
       0.5*spacing[0]*(count[0]-1),
       0.5*spacing[1]*(count[1]-1),
@@ -893,7 +909,7 @@ bool mjCFlexcomp::MakeBox(char* error, int error_sz) {
     for (int ix=0; ix < count[0]; ix++) {
       for (int iz=0; iz < count[2]; iz++) {
         // add point
-        if (iz>0 && iz < count[2]-1) {
+        if (iz > 0 && iz < count[2]-1) {
           BoxProject(pos, ix, iy, iz);
           point.push_back(pos[0]);
           point.push_back(pos[1]);
@@ -990,14 +1006,6 @@ bool mjCFlexcomp::MakeMesh(mjCModel* model, char* error, int error_sz) {
     return comperr(error, "File is required", error_sz);
   }
 
-  // get extension and check; must be STL, OBJ or MSH
-  std::string ext = mjuu_getext(file);
-  if (strcasecmp(ext.c_str(), ".stl") &&
-      strcasecmp(ext.c_str(), ".obj") &&
-      strcasecmp(ext.c_str(), ".msh")) {
-    return comperr(error, "Mesh file extension must be stl, obj or msh", error_sz);
-  }
-
   // check dim
   if (def.spec.flex->dim < 2) {
     return comperr(error, "Flex dim must be at least 2 for mesh", error_sz);
@@ -1007,6 +1015,11 @@ bool mjCFlexcomp::MakeMesh(mjCModel* model, char* error, int error_sz) {
   std::string filename = mjuu_combinePaths(mjs_getString(model->spec.meshdir), file);
   mjResource* resource = nullptr;
 
+
+  if (mjCMesh::IsMSH(filename)) {
+    return comperr(error, "legacy MSH files are not supported in flexcomp", error_sz);
+  }
+
   try {
     resource = mjCBase::LoadResource(mjs_getString(model->spec.modelfiledir),
                                      filename, 0);
@@ -1014,45 +1027,28 @@ bool mjCFlexcomp::MakeMesh(mjCModel* model, char* error, int error_sz) {
     return comperr(error, err.message, error_sz);
   }
 
+
   // load mesh
   mjCMesh mesh;
-  bool isobj = false;
   try {
-    if (!strcasecmp(ext.c_str(), ".stl")) {
-      mesh.LoadSTL(resource);
-    } else if (!strcasecmp(ext.c_str(), ".obj")) {
-      isobj = true;
-      mesh.LoadOBJ(resource);
-    } else {
-      mesh.LoadMSH(resource);
-    }
+    mesh.LoadFromResource(resource, true);
     mju_closeResource(resource);
   } catch (mjCError err) {
     mju_closeResource(resource);
     return comperr(error, err.message, error_sz);
   }
 
-  // LoadOBJ uses userXXX, extra processing needed
-  if (isobj) {
-    // check sizes
-    if (mesh.Vert().empty() || mesh.Face().empty()) {
-      return comperr(error, "Vertex and face data required", error_sz);
-    }
-    if (mesh.Vert().size()%3) {
-      return comperr(error, "Vertex data must be multiple of 3", error_sz);
-    }
-    if (mesh.Face().size()%3) {
-      return comperr(error, "Face data must be multiple of 3", error_sz);
-    }
-
-    // remove repeated vertices (not called in LoadOBJ)
-    mesh.RemoveRepeated();
+  // check sizes
+  if (mesh.Vert().empty() || mesh.Face().empty()) {
+    return comperr(error, "Vertex and face data required", error_sz);
   }
 
-  // copy vertices, convert from float to double
-  point = vector<double> (mesh.nvert()*3);
-  for (int i=0; i < mesh.nvert()*3; i++) {
-    point[i] = (double) mesh.Vert(i);
+  // copy vertices
+  point = mesh.Vert();
+
+  if (mesh.HasTexcoord()) {
+    texcoord = mesh.Texcoord();
+    elemtexcoord = mesh.FaceTexcoord();
   }
 
   // copy faces or create 3D mesh
@@ -1158,7 +1154,7 @@ bool mjCFlexcomp::MakeGMSH(mjCModel* model, char* error, int error_sz) {
 
 // load GMSH format 4.1
 void mjCFlexcomp::LoadGMSH41(char* buffer, int binary, int nodeend,
-                            int nodebegin, int elemend, int elembegin){
+                             int nodebegin, int elemend, int elembegin){
   // header size
   constexpr int kGmsh41HeaderSize = 52;
   // base for node tags, to be subtracted from element data
@@ -1185,6 +1181,11 @@ void mjCFlexcomp::LoadGMSH41(char* buffer, int binary, int nodeend,
     // require single block
     if (numEntityBlocks != 1 || numNodes != numNodesInBlock) {
       throw mjCError(NULL, "All nodes must be in single block");
+    }
+
+    // require maximum number of nodes be equal to maximum number of nodes in a block
+    if (maxNodeTag != numNodesInBlock){
+      throw mjCError(NULL, "Maximum number of nodes must be equal to number of nodes in a block");
     }
 
     // check dimensionality and save
@@ -1576,7 +1577,7 @@ void mjCFlexcomp::LoadGMSH22(char* buffer, int binary, int nodeend,
       numNodeTags = 4;
     }
 
-    if (numNodeTags < 1 || numNodeTags >4) {
+    if (numNodeTags < 1 || numNodeTags > 4) {
       throw mjCError(NULL, "Invalid number of node tags");
     }
 
@@ -1585,7 +1586,7 @@ void mjCFlexcomp::LoadGMSH22(char* buffer, int binary, int nodeend,
 
     // read elements, discard all tags
     element.reserve(numNodeTags*numElements);
-    for (size_t i=0; i<numElements; i++) {
+    for (size_t i=0; i < numElements; i++) {
       int nodeTag = 0, physicalEntityTag = 0, elementModelEntityTag = 0;
       if (i != 0) {
         ss >> tag >> elementType >> numTags;
@@ -1664,7 +1665,7 @@ void mjCFlexcomp::LoadGMSH22(char* buffer, int binary, int nodeend,
       numNodeTags = 4;
     }
 
-    if (numNodeTags < 1 || numNodeTags >4) {
+    if (numNodeTags < 1 || numNodeTags > 4) {
       throw mjCError(NULL, "Invalid number of node tags");
     }
 
@@ -1701,7 +1702,7 @@ void mjCFlexcomp::LoadGMSH22(char* buffer, int binary, int nodeend,
       }
 
       // read first element
-      for (int k =0; k<numNodeTags; k++) {
+      for (int k =0; k < numNodeTags; k++) {
         ReadFromBuffer(&nodeTag, elementsBuffer + componentSize*(6+k));
         if (nodeTag > numNodes || nodeTag < 1) {
           throw mjCError(NULL, "Invalid node tag");
@@ -1740,7 +1741,7 @@ void mjCFlexcomp::LoadGMSH22(char* buffer, int binary, int nodeend,
       }
 
       // read every other element
-      for (int i=0; i<numElements-1; i++) {
+      for (int i=0; i < numElements-1; i++) {
         int offset = componentSize*(4+2) + i*elementDataSizeFtetwild;
         const char* tagBuffer = elementsBuffer + componentSize*2;
         ReadFromBuffer(&tag, tagBuffer + offset);

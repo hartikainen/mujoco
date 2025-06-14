@@ -66,24 +66,21 @@ MJAPI int mjs_activatePlugin(mjSpec* s, const char* name);
 // Turn deep copy on or off attach. Returns 0 on success.
 MJAPI int mjs_setDeepCopy(mjSpec* s, int deepcopy);
 
+// Copy real-valued arrays from model to spec, returns 1 on success.
+MJAPI int mj_copyBack(mjSpec* s, const mjModel* m);
+
 
 //---------------------------------- Attachment ----------------------------------------------------
 
-// Attach child body to a parent frame, return the attached body if success or NULL otherwise.
-MJAPI mjsBody* mjs_attachBody(mjsFrame* parent, const mjsBody* child,
-                              const char* prefix, const char* suffix);
-
-// Attach child frame to a parent body, return the attached frame if success or NULL otherwise.
-MJAPI mjsFrame* mjs_attachFrame(mjsBody* parent, const mjsFrame* child,
-                                const char* prefix, const char* suffix);
-
-// Attach child body to a parent site, return the attached body if success or NULL otherwise.
-MJAPI mjsBody* mjs_attachToSite(mjsSite* parent, const mjsBody* child,
-                                const char* prefix, const char* suffix);
+// Attach child to a parent, return the attached element if success or NULL otherwise.
+MJAPI mjsElement* mjs_attach(mjsElement* parent, const mjsElement* child,
+                             const char* prefix, const char* suffix);
 
 // Detach body from mjSpec, remove all references and delete the body, return 0 on success.
 MJAPI int mjs_detachBody(mjSpec* s, mjsBody* b);
 
+// Detach default from mjSpec, remove all references and delete the default, return 0 on success.
+MJAPI int mjs_detachDefault(mjSpec* s, mjsDefault* d);
 
 //---------------------------------- Add tree elements ---------------------------------------------
 
@@ -169,6 +166,37 @@ MJAPI mjsPlugin* mjs_addPlugin(mjSpec* s);
 MJAPI mjsDefault* mjs_addDefault(mjSpec* s, const char* classname, const mjsDefault* parent);
 
 
+//---------------------------------- Set actuator parameters ---------------------------------------
+
+// Set actuator to motor, return error on failure.
+MJAPI const char* mjs_setToMotor(mjsActuator* actuator);
+
+// Set actuator to position, return error on failure.
+MJAPI const char* mjs_setToPosition(mjsActuator* actuator, double kp, double kv[1],
+                                    double dampratio[1], double timeconst[1], double inheritrange);
+
+// Set actuator to integrated velocity, return error on failure.
+MJAPI const char* mjs_setToIntVelocity(mjsActuator* actuator, double kp, double kv[1],
+                                       double dampratio[1], double timeconst[1], double inheritrange);
+
+// Set actuator to velocity, return error on failure.
+MJAPI const char* mjs_setToVelocity(mjsActuator* actuator, double kv);
+
+// Set actuator to damper, return error on failure.
+MJAPI const char* mjs_setToDamper(mjsActuator* actuator, double kv);
+
+// Set actuator to cylinder actuator, return error on failure.
+MJAPI const char* mjs_setToCylinder(mjsActuator* actuator, double timeconst,
+                                    double bias, double area, double diameter);
+
+// Set actuator to muscle, return error on failure.
+MJAPI const char* mjs_setToMuscle(mjsActuator* actuator, double timeconst[2], double tausmooth,
+                                  double range[2], double force, double scale, double lmin,
+                                  double lmax, double vmax, double fpmax, double fvmax);
+
+// Set actuator to adhesion, return error on failure.
+MJAPI const char* mjs_setToAdhesion(mjsActuator* actuator, double gain);
+
 //---------------------------------- Add assets ----------------------------------------------------
 
 // Add mesh.
@@ -207,6 +235,9 @@ MJAPI mjsBody* mjs_findChild(mjsBody* body, const char* name);
 // Get parent body.
 MJAPI mjsBody* mjs_getParent(mjsElement* element);
 
+// Get parent frame.
+MJAPI mjsFrame* mjs_getFrame(mjsElement* element);
+
 // Find frame by name.
 MJAPI mjsFrame* mjs_findFrame(mjSpec* s, const char* name);
 
@@ -214,7 +245,7 @@ MJAPI mjsFrame* mjs_findFrame(mjSpec* s, const char* name);
 MJAPI mjsDefault* mjs_getDefault(mjsElement* element);
 
 // Find default in model by class name.
-MJAPI const mjsDefault* mjs_findDefault(mjSpec* s, const char* classname);
+MJAPI mjsDefault* mjs_findDefault(mjSpec* s, const char* classname);
 
 // Get global default from model.
 MJAPI mjsDefault* mjs_getSpecDefault(mjSpec* s);
@@ -355,14 +386,17 @@ MJAPI const char* mjs_getString(const mjString* source);
 // Get double array contents and optionally its size.
 MJAPI const double* mjs_getDouble(const mjDoubleVec* source, int* size);
 
+// Get plugin attributes.
+MJAPI const void* mjs_getPluginAttributes(const mjsPlugin* plugin);
+
 
 //---------------------------------- Other utilities -----------------------------------------------
 
 // Set element's default.
 MJAPI void mjs_setDefault(mjsElement* element, const mjsDefault* def);
 
-// Set element's enlcosing frame.
-MJAPI void mjs_setFrame(mjsElement* dest, mjsFrame* frame);
+// Set element's enclosing frame, return 0 on success.
+MJAPI int mjs_setFrame(mjsElement* dest, mjsFrame* frame);
 
 // Resolve alternative orientations to quat, return error if any.
 MJAPI const char* mjs_resolveOrientation(double quat[4], mjtByte degree, const char* sequence,
@@ -370,6 +404,20 @@ MJAPI const char* mjs_resolveOrientation(double quat[4], mjtByte degree, const c
 
 // Transform body into a frame.
 MJAPI mjsFrame* mjs_bodyToFrame(mjsBody** body);
+
+// Set user payload.
+MJAPI void mjs_setUserValue(mjsElement* element, const char* key, const void* data);
+
+// Set user payload.
+MJAPI void mjs_setUserValueWithCleanup(mjsElement* element, const char* key,
+                                       const void* data,
+                                       void (*cleanup)(const void*));
+
+// Return user payload or NULL if none found.
+MJAPI const void* mjs_getUserValue(mjsElement* element, const char* key);
+
+// Delete user payload.
+MJAPI void mjs_deleteUserValue(mjsElement* element, const char* key);
 
 
 //---------------------------------- Initialization  -----------------------------------------------

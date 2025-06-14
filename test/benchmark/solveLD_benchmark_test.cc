@@ -19,6 +19,7 @@
 #include <mujoco/mjdata.h>
 #include <mujoco/mujoco.h>
 #include "src/engine/engine_core_smooth.h"
+#include "src/engine/engine_util_misc.h"
 #include "test/fixture.h"
 
 namespace mujoco {
@@ -50,12 +51,10 @@ static void BM_solveLD(benchmark::State& state, bool featherstone, bool coil) {
     vec[i] = 0.2 + 0.3*i;
   }
 
-  // make legacy matrix
+  // scatter into legacy matrix
   mjtNum* LDlegacy = mj_stackAllocNum(d, m->nM);
   mju_zero(LDlegacy, m->nM);
-  for (int i=0; i < m->nC; i++) {
-    LDlegacy[d->mapM2C[i]] = d->qLD[i];
-  }
+  mju_scatter(LDlegacy, d->qLD, d->mapM2M, m->nC);
 
   // benchmark
   while (state.KeepRunningBatch(kNumBenchmarkSteps)) {
@@ -65,7 +64,7 @@ static void BM_solveLD(benchmark::State& state, bool featherstone, bool coil) {
         mj_solveLD_legacy(m, res, 1, LDlegacy, d->qLDiagInv);
       } else {
         mj_solveLD(res, d->qLD, d->qLDiagInv, m->nv, 1,
-                   d->C_rownnz, d->C_rowadr, m->dof_simplenum, d->C_colind);
+                   d->M_rownnz, d->M_rowadr, d->M_colind);
       }
     }
   }

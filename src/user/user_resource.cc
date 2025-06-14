@@ -35,7 +35,6 @@
 #endif
 
 #include <mujoco/mjplugin.h>
-#include <mujoco/mujoco.h>
 #include "engine/engine_plugin.h"
 #include "engine/engine_util_misc.h"
 #include "user/user_util.h"
@@ -205,7 +204,7 @@ void mju_closeResource(mjResource* resource) {
   if (provider) {
     if (provider->close) provider->close(resource);
   } else {
-     FileClose(resource);  // clear OS filesystem if present
+    FileClose(resource);  // clear OS filesystem if present
   }
 
   // free resource

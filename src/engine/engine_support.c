@@ -41,8 +41,8 @@
 
 //-------------------------- Constants -------------------------------------------------------------
 
- #define mjVERSION 328
-#define mjVERSIONSTRING "3.2.8"
+ #define mjVERSION 334
+#define mjVERSIONSTRING "3.3.4"
 
 // names of disable flags
 const char* mjDISABLESTRING[mjNDISABLE] = {
@@ -61,7 +61,8 @@ const char* mjDISABLESTRING[mjNDISABLE] = {
   "Sensor",
   "Midphase",
   "Eulerdamp",
-  "AutoReset"
+  "AutoReset",
+  "NativeCCD"
 };
 
 
@@ -72,8 +73,7 @@ const char* mjENABLESTRING[mjNENABLE] = {
   "Fwdinv",
   "InvDiscrete",
   "MultiCCD",
-  "Island",
-  "NativeCCD"
+  "Island"
 };
 
 
@@ -811,11 +811,14 @@ void mj_jacDot(const mjModel* m, const mjData* d,
                mjtNum* jacp, mjtNum* jacr, const mjtNum point[3], int body) {
   int nv = m->nv;
   mjtNum offset[3];
+  mjtNum pvel[6];  // point velocity (rot:lin order)
 
-  // clear jacobians, compute offset if required
+  // clear jacobians, compute offset and pvel if required
   if (jacp) {
     mju_zero(jacp, 3*nv);
-    mju_sub3(offset, point, d->subtree_com+3*m->body_rootid[body]);
+    const mjtNum* com = d->subtree_com+3*m->body_rootid[body];
+    mju_sub3(offset, point, com);
+    mju_transformSpatial(pvel, d->cvel+6*body, 0, point, com, 0);
   }
   if (jacr) {
     mju_zero(jacr, 3*nv);
@@ -838,6 +841,7 @@ void mj_jacDot(const mjModel* m, const mjData* d,
   while (i >= 0) {
     mjtNum cdof_dot[6];
     mju_copy(cdof_dot, d->cdof_dot+6*i, 6);
+    mjtNum* cdof = d->cdof+6*i;
 
     // check for quaternion
     mjtJoint type = m->jnt_type[m->dof_jntid[i]];
@@ -846,7 +850,7 @@ void mj_jacDot(const mjModel* m, const mjData* d,
 
     // compute cdof_dot for quaternion (use current body cvel)
     if (is_quat) {
-      mju_crossMotion(cdof_dot, d->cvel+6*m->dof_bodyid[i], d->cdof+6*i);
+      mju_crossMotion(cdof_dot, d->cvel+6*m->dof_bodyid[i], cdof);
     }
 
     // construct rotation jacobian
@@ -858,11 +862,17 @@ void mj_jacDot(const mjModel* m, const mjData* d,
 
     // construct translation jacobian (correct for rotation)
     if (jacp) {
-      mjtNum tmp[3] = {0};
-      mju_cross(tmp, cdof_dot, offset);
-      jacp[i+0*nv] += cdof_dot[3] + tmp[0];
-      jacp[i+1*nv] += cdof_dot[4] + tmp[1];
-      jacp[i+2*nv] += cdof_dot[5] + tmp[2];
+      // first correction term, account for varying cdof
+      mjtNum tmp1[3];
+      mju_cross(tmp1, cdof_dot, offset);
+
+      // second correction term, account for point translational velocity
+      mjtNum tmp2[3];
+      mju_cross(tmp2, cdof, pvel + 3);
+
+      jacp[i+0*nv] += cdof_dot[3] + tmp1[0] + tmp2[0];
+      jacp[i+1*nv] += cdof_dot[4] + tmp1[1] + tmp2[1];
+      jacp[i+2*nv] += cdof_dot[5] + tmp1[2] + tmp2[2];
     }
 
     // advance to parent dof
@@ -962,14 +972,9 @@ void mj_fullM(const mjModel* m, mjtNum* dst, const mjtNum* M) {
 
 
 
-// multiply vector by inertia matrix
-void mj_mulM(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec) {
-  int nv = m->nv;
-  const mjtNum* M = d->qM;
-  const int* Madr = m->dof_Madr;
-  const int* parentid = m->dof_parentid;
-  const int* simplenum = m->dof_simplenum;
-
+// multiply vector by inertia matrix (implementation)
+void mj_mulM_impl(mjtNum* res, const mjtNum* vec, int nv, const mjtNum* M,
+                  const int* Madr, const int* parentid, const int* simplenum) {
   mju_zero(res, nv);
 
   for (int i=0; i < nv; i++) {
@@ -1021,64 +1026,9 @@ void mj_mulM(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec) 
 
 
 
-// multiply vector by inertia matrix for one dof island
-void mj_mulM_island(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec,
-                    int island, int flg_vecunc) {
-  // if no island, call regular function
-  if (island < 0) {
-    mj_mulM(m, d, res, vec);
-    return;
-  }
-
-  // local constants: general
-  const mjtNum* M = d->qM;
-  const int* Madr = m->dof_Madr;
-  const int* parentid = m->dof_parentid;
-  const int* simplenum = m->dof_simplenum;
-
-  // local constants: island specific
-  int ndof = d->island_dofnum[island];
-  const int* dofind = d->island_dofind + d->island_dofadr[island];
-  const int* islandind = d->dof_islandind;
-
-  mju_zero(res, ndof);
-
-  for (int k=0; k < ndof; k++) {
-    // address in full dof vector
-    int i = dofind[k];
-
-    // address in M
-    int adr = Madr[i];
-
-    // diagonal
-    if (flg_vecunc) {
-      res[k] = M[adr]*vec[i];
-    } else {
-      res[k] = M[adr]*vec[k];
-    }
-
-    // simple dof: continue
-    if (simplenum[i]) {
-      continue;
-    }
-
-    // off-diagonal
-    int j = parentid[i];
-    while (j >= 0) {
-      adr++;
-      int l = islandind[j];
-      if (flg_vecunc) {
-        res[k] += M[adr]*vec[j];
-        res[l] += M[adr]*vec[i];
-      } else {
-        res[k] += M[adr]*vec[l];
-        res[l] += M[adr]*vec[k];
-      }
-
-      // advance to parent
-      j = parentid[j];
-    }
-  }
+// multiply vector by inertia matrix
+void mj_mulM(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec) {
+  mj_mulM_impl(res, vec, m->nv, d->qM, m->dof_Madr, m->dof_parentid, m->dof_simplenum);
 }
 
 
@@ -1097,14 +1047,14 @@ void mj_mulM2(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec)
 
     // non-simple: add off-diagonals
     if (!m->dof_simplenum[i]) {
-      int adr = d->C_rowadr[i];
-      res[i] += mju_dotSparse(qLD+adr, vec, d->C_rownnz[i] - 1, d->C_colind+adr, /*flg_unc1=*/0);
+      int adr = d->M_rowadr[i];
+      res[i] += mju_dotSparse(qLD+adr, vec, d->M_rownnz[i] - 1, d->M_colind+adr);
     }
   }
 
   // res *= sqrt(D)
   for (int i=0; i < nv; i++) {
-    int diag = d->C_rowadr[i] + d->C_rownnz[i] - 1;
+    int diag = d->M_rowadr[i] + d->M_rownnz[i] - 1;
     res[i] *= mju_sqrt(qLD[diag]);
   }
 }
@@ -1112,77 +1062,26 @@ void mj_mulM2(const mjModel* m, const mjData* d, mjtNum* res, const mjtNum* vec)
 
 
 // add inertia matrix to destination matrix
-//  destination can be sparse uncompressed, or dense when all int* are NULL
+//  destination can be sparse or dense when all int* are NULL
 void mj_addM(const mjModel* m, mjData* d, mjtNum* dst,
              int* rownnz, int* rowadr, int* colind) {
+  int nv = m->nv;
   // sparse
   if (rownnz && rowadr && colind) {
-    int nC = m->nC;
     mj_markStack(d);
+    mjtNum* buf_val = mjSTACKALLOC(d, nv, mjtNum);
+    int* buf_ind = mjSTACKALLOC(d, nv, int);
 
-    // create reduced sparse inertia matrix C
-    mjtNum* C = mjSTACKALLOC(d, nC, mjtNum);
-    for (int i=0; i < nC; i++) {
-      C[i] = d->qM[d->mapM2C[i]];
-    }
+    mju_addToMatSparse(dst, rownnz, rowadr, colind, nv,
+      d->M, d->M_rownnz, d->M_rowadr, d->M_colind,
+      buf_val, buf_ind);
 
-    mj_addMSparse(m, d, dst, rownnz, rowadr, colind, C,
-                  d->C_rownnz, d->C_rowadr, d->C_colind);
     mj_freeStack(d);
   }
 
   // dense
   else {
-    mj_addMDense(m, d, dst);
-  }
-}
-
-
-
-// add inertia matrix to sparse destination matrix
-void mj_addMSparse(const mjModel* m, mjData* d, mjtNum* dst,
-                   int* rownnz, int* rowadr, int* colind, mjtNum* M,
-                   int* M_rownnz, int* M_rowadr, int* M_colind) {
-  int nv = m->nv;
-
-  mj_markStack(d);
-  int* buf_ind = mjSTACKALLOC(d, nv, int);
-  mjtNum* sparse_buf = mjSTACKALLOC(d, nv, mjtNum);
-
-  // add to destination
-  for (int i=0; i < nv; i++) {
-    rownnz[i] = mju_combineSparse(dst + rowadr[i], M + M_rowadr[i], 1, 1,
-                                  rownnz[i], M_rownnz[i], colind + rowadr[i],
-                                  M_colind + M_rowadr[i], sparse_buf, buf_ind);
-  }
-  mj_freeStack(d);
-}
-
-
-
-// add inertia matrix to dense destination matrix
-void mj_addMDense(const mjModel* m, mjData* d, mjtNum* dst) {
-  int nv = m->nv;
-
-  for (int i = 0; i < nv; i++) {
-    int adr = m->dof_Madr[i];
-    int j = i;
-    while (j >= 0) {
-      // add
-      dst[i*nv+j] += d->qM[adr];
-      if (j < i) {
-        dst[j*nv+i] += d->qM[adr];
-      }
-
-      // only diagonal if simplenum
-      if (m->dof_simplenum[i]) {
-        break;
-      }
-
-      // advance
-      j = m->dof_parentid[j];
-      adr++;
-    }
+    mju_addToSymSparse(dst, d->M, nv, d->M_rownnz, d->M_rowadr, d->M_colind, /*flg_upper=*/ 1);
   }
 }
 
@@ -1425,7 +1324,7 @@ mjtNum mj_geomDistance(const mjModel* m, const mjData* d, int geom1, int geom2, 
   }
 
   // use nativecdd if flag is enabled
-  if (mjENABLED(mjENBL_NATIVECCD)) {
+  if (!mjDISABLED(mjDSBL_NATIVECCD)) {
     if (func == mjc_Convex || func == mjc_BoxBox) {
       return mj_geomDistanceCCD(m, d, g1, g2, distmax, fromto);
     }

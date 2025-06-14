@@ -102,7 +102,8 @@ bool mjCCache::Insert(const std::string& modelname, const mjResource *resource,
 
 
 
-// populate data from the cache into the given function
+// populate data from the cache into the given function, return true if data was
+// copied
 bool mjCCache::PopulateData(const mjResource* resource, mjCDataFunc fn) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = lookup_.find(resource->name);
@@ -121,8 +122,7 @@ bool mjCCache::PopulateData(const mjResource* resource, mjCDataFunc fn) {
   entries_.erase(asset);
   entries_.insert(asset);
 
-  asset->PopulateData(fn);
-  return true;
+  return asset->PopulateData(fn);
 }
 
 
@@ -172,8 +172,8 @@ std::size_t mjCCache::MaxSize() const {
 
 
 std::size_t mjCCache::Size() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return size_;
+  std::lock_guard<std::mutex> lock(mutex_);
+  return size_;
 }
 
 
@@ -183,7 +183,7 @@ void mjCCache::DeleteAsset(const std::string& id) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto it = lookup_.find(id);
   if (it != lookup_.end()) {
-     Delete(&(it->second));
+    Delete(&(it->second));
   }
 }
 
@@ -209,7 +209,7 @@ void mjCCache::Delete(mjCAsset* asset, const std::string& skip) {
   for (auto& reference : asset->References()) {
     if (reference != skip) {
       models_[reference].erase(asset);
-     }
+    }
   }
   lookup_.erase(asset->Id());
 }

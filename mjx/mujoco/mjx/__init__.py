@@ -17,6 +17,7 @@
 # pylint:disable=g-importing-member
 from mujoco.mjx._src.collision_driver import collision
 from mujoco.mjx._src.constraint import make_constraint
+from mujoco.mjx._src.derivative import deriv_smooth_vel
 from mujoco.mjx._src.forward import euler
 from mujoco.mjx._src.forward import forward
 from mujoco.mjx._src.forward import fwd_acceleration
@@ -26,6 +27,7 @@ from mujoco.mjx._src.forward import fwd_velocity
 from mujoco.mjx._src.forward import implicit
 from mujoco.mjx._src.forward import rungekutta4
 from mujoco.mjx._src.forward import step
+from mujoco.mjx._src.inverse import inverse
 from mujoco.mjx._src.io import get_data
 from mujoco.mjx._src.io import get_data_into
 from mujoco.mjx._src.io import make_data
@@ -46,6 +48,8 @@ from mujoco.mjx._src.smooth import rne
 from mujoco.mjx._src.smooth import rne_postconstraint
 from mujoco.mjx._src.smooth import subtree_vel
 from mujoco.mjx._src.smooth import tendon
+from mujoco.mjx._src.smooth import tendon_armature
+from mujoco.mjx._src.smooth import tendon_bias
 from mujoco.mjx._src.smooth import transmission
 from mujoco.mjx._src.solver import solve
 from mujoco.mjx._src.support import apply_ft

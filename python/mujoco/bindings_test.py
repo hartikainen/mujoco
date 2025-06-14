@@ -377,6 +377,12 @@ class MuJoCoBindingsTest(parameterized.TestCase):
         4,
     )
 
+  def test_mjvisual_repr(self):
+    # Regression test for issue #2488.
+    vis_repr = repr(self.model.vis)
+    self.assertNotEmpty(vis_repr)
+    self.assertIn('MjVisual', vis_repr)
+
   def test_mjmodel_can_read_and_write_opt(self):
     self.assertEqual(self.model.opt.timestep, 0.002)
     np.testing.assert_array_equal(self.model.opt.gravity, [0, 0, -9.81])
@@ -617,10 +623,12 @@ class MuJoCoBindingsTest(parameterized.TestCase):
 
     ncon = 13
     nefc = 17
-    mujoco._functions._realloc_con_efc(self.data, ncon=ncon, nefc=nefc)
+    nj = 21
+    mujoco._functions._realloc_con_efc(self.data, ncon=ncon, nefc=nefc, nJ=nj)
 
     self.assertLen(self.data.contact, ncon)
     self.assertEqual(self.data.efc_id.shape, (nefc,))
+    self.assertEqual(self.data.efc_J.shape, (nj,))
     self.assertEqual(self.data.efc_KBIP.shape, (nefc, 4))
 
     expected_error = 'insufficient arena memory available'
@@ -938,7 +946,7 @@ Euler integrator, semi-implicit in velocity.
     self.assertEqual(mujoco.mjtEnableBit.mjENBL_OVERRIDE, 1 << 0)
     self.assertEqual(mujoco.mjtEnableBit.mjENBL_ENERGY, 1 << 1)
     self.assertEqual(mujoco.mjtEnableBit.mjENBL_FWDINV, 1 << 2)
-    self.assertEqual(mujoco.mjtEnableBit.mjNENABLE, 7)
+    self.assertEqual(mujoco.mjtEnableBit.mjNENABLE, 6)
     self.assertEqual(mujoco.mjtGeom.mjGEOM_PLANE, 0)
     self.assertEqual(mujoco.mjtGeom.mjGEOM_HFIELD, 1)
     self.assertEqual(mujoco.mjtGeom.mjGEOM_SPHERE, 2)
@@ -1076,6 +1084,20 @@ Euler integrator, semi-implicit in velocity.
         mujoco.FatalError, r'\Amj_stackAlloc: out of memory, stack overflow'
     ):
       mujoco.mj_forward(self.model, self.data)
+
+  def test_timer_installed_by_default(self):
+    timer_step = mujoco.mjtTimer.mjTIMER_STEP
+    self.assertEqual(self.data.timer[timer_step].number, 0)
+    self.assertEqual(self.data.timer[timer_step].duration, 0.0)
+
+    mujoco.mj_step(self.model, self.data)
+    self.assertEqual(self.data.timer[timer_step].number, 1)
+    duration_1 = self.data.timer[timer_step].duration
+    self.assertGreater(duration_1, 0.0)
+
+    mujoco.mj_step(self.model, self.data, 5)
+    self.assertEqual(self.data.timer[timer_step].number, 6)
+    self.assertGreater(self.data.timer[timer_step].duration, duration_1)
 
   def test_mjcb_time(self):
 

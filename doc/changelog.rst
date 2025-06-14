@@ -2,9 +2,105 @@
 Changelog
 =========
 
-Upcoming version (not yet released)
------------------------------------
+Version 3.3.3 (June 10, 2025)
+-----------------------------
 
+General
+^^^^^^^
+1. Refactored island implementation so that island data is memory-contiguous. This speeds up island processing in the
+   solver and clears the way for the addition of the Newton and PGS solvers (currently only CG is supported).
+2. Removed the :at:`shell` plugin. This is now supported by :ref:`flexcomp<body-flexcomp>` and is active depending on
+   the :ref:`elastic2d<flexcomp-elasticity-elastic2d>` attribute (off by default).
+3. Replaced the :ref:`directional<body-light-directional>` (boolean) field for lights with a
+   :ref:`type<body-light-type>` field (of type :ref:`mjtLightType<mjtLightType>`) to allow for additional lighting
+   types.
+4. Added new sub-component :ref:`mj_makeM` which combines the :ref:`mj_crb` call with additional logic to support the
+   introduction in 3.3.1 of :ref:`tendon armature<tendon-spatial-armature>`. In addition to the traditional
+   ``mjData.qM``, :ref:`mj_makeM` also computes ``mjData.M``, a CSR representation of the same matrix.
+5. Added a new function :ref:`mj_copyBack` to copy real-valued arrays in an mjModel to a compatible mjSpec.
+6. Removed the limitation of :ref:`fusestatic<compiler-fusestatic>` to models which contain no references. The fusestatic
+   flag will now fuse all bodies which are not referenced and ignore bodies which are referenced.
+
+Simulate
+^^^^^^^^
+7. The struct ``mjv_sceneState`` has been removed. This struct was used for partial synchronization of ``mjModel`` and
+   ``mjData`` when the Python viewer is used in passive mode. This functionality is now provided by :ref:`mjv_copyModel`
+   and :ref:`mjv_copyData`, which don't copy arrays which are not required for visualization.
+
+.. image:: images/changelog/procedural_terrain_generation.png
+   :width: 33%
+   :align: right
+
+Python bindings
+^^^^^^^^^^^^^^^
+
+8. Added examples of procedural terrain generation to the Model Editing tutorial: |mjspec_colab|
+
+MJX
+^^^
+9. Added tendon armature.
+
+Version 3.3.2 (April 28, 2025)
+------------------------------
+
+MJX
+^^^
+1. Added inverse dynamics.
+2. Added tendon actuator force sensor.
+3. Fix :github:issue:`2606` such that ``make_data`` copies over ``mocap_pos`` and ``mocap_quat``
+   from ``body_pos`` and ``body_quat``.
+
+Version 3.3.1 (Apr 9, 2025)
+----------------------------
+
+.. admonition:: Breaking API changes
+   :class: attention
+
+   1. The default value of the flag for toggling :ref:`internal flex contacts<flex-contact-internal>` was changed from
+      "true" to "false". This feature has proven to be counterintuitive for users.
+   2. All of the attach functions (``mjs_attachBody``, ``mjs_attachFrame``, ``mjs_attachToSite``,
+      ``mjs_attachFrameToSite``) have been removed and replaced by a single function :ref:`mjs_attach`.
+
+General
+^^^^^^^
+3. Added :ref:`tendon armature<tendon-spatial-armature>`: inertia associated with changes in tendon length.
+4. Added the :ref:`compiler/saveinertial<compiler-saveinertial>` flag, writing explicit inertial clauses for all
+   bodies when saving to XML.
+5. Added :ref:`orientation<body-composite-quat>` attribute to :ref:`composite<body-composite>`. Moreover, allow the
+   composite to be the direct child of a frame.
+6. Added :ref:`tendon actuator force limits<tendon-spatial-actuatorfrclimited>` and
+   :ref:`tendon actuator force sensor<sensor-tendonactuatorfrc>`.
+
+MJX
+^^^
+7. Added tendon actuator force limits.
+
+Bug fixes
+^^^^^^^^^
+8. :ref:`mj_jacDot` was missing a term that accounts for the motion of the point with respect to
+   which the Jacobian is computed, now fixed.
+9. Fixed a bug that caused the parent frame of elements in the child worldbody to be incorrectly set when attaching an
+   mjSpec to a frame or a site.
+10. Fixed a bug that caused shadow rendering to flicker on platforms (e.g., MacOS) that do not support
+    ARB_clip_control. Fixed in collaboration with :github:user:`aftersomemath`.
+
+Python bindings
+^^^^^^^^^^^^^^^
+
+.. youtube:: LbANnKMDOHg
+   :aspect: 16:7
+   :align: right
+   :width: 240px
+
+11. Added examples of procedural model creation to the Model Editing tutorial: |mjspec_colab|
+12. Added support for nameless :ref:`mjSpec` objects in the ``bind`` method, see the corresponding
+    :ref:`section<PyMJCF>` in the documentation.
+
+.. |mjspec_colab| image:: https://colab.research.google.com/assets/colab-badge.svg
+                  :target: https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb
+
+Version 3.3.0 (Feb 26, 2025)
+----------------------------
 
 Feature promotion
 ^^^^^^^^^^^^^^^^^
@@ -13,53 +109,76 @@ Feature promotion
    :align: right
    :width: 240px
 
-- Introduced a new kind of **fast deformable body**, activated by setting :ref:`flexcomp/dof<body-flexcomp-dof>` to
-  "trilinear". This type of :ref:`deformable<CDeformable>` flex object has the same collision geometry as a regular
-  flex, but has far fewer degrees of freedom. Instead of 3 dofs per vertex, only the corners of the bounding box are
-  free to move, with the positions of the interior vertices computed with trilinear interpolation of the 8 corners, for
-  a total of 24 dofs for the entire flex object (or less, if some of the corners are pinned). This limits the types of
-  deformation achievable by the flex, but allows for much faster simulation. For example, see the video on the right
-  comparing `full <https://github.com/google-deepmind/mujoco/blob/main/model/flex/gripper.xml>`__ and `trilinear
-  <https://github.com/google-deepmind/mujoco/blob/main/model/flex/gripper_trilinear.xml>`__ flexes for modeling
-  deformable gripper pads.
+1. Introduced a new kind of **fast deformable body**, activated by setting :ref:`flexcomp/dof<body-flexcomp-dof>` to
+   "trilinear". This type of :ref:`deformable<CDeformable>` flex object has the same collision geometry as a regular
+   flex, but has far fewer degrees of freedom. Instead of 3 dofs per vertex, only the corners of the bounding box are
+   free to move, with the positions of the interior vertices computed with trilinear interpolation of the 8 corners, for
+   a total of 24 dofs for the entire flex object (or less, if some of the corners are pinned). This limits the types of
+   deformation achievable by the flex, but allows for much faster simulation. For example, see the video on the right
+   comparing `full <https://github.com/google-deepmind/mujoco/blob/main/model/flex/gripper.xml>`__ and `trilinear
+   <https://github.com/google-deepmind/mujoco/blob/main/model/flex/gripper_trilinear.xml>`__ flexes for modeling
+   deformable gripper pads.
+
+
+.. image:: images/computation/ccd_light.gif
+      :width: 20%
+      :align: right
+      :class: only-light
+
+.. image:: images/computation/ccd_dark.gif
+   :width: 20%
+   :align: right
+   :class: only-dark
+
+2. The native convex collision detection pipeline introduced in 3.2.3 and enabled by the
+   :ref:`nativeccd<option-flag-nativeccd>` flag, is now the default. See the section on
+   :ref:`Convex Collision Detection<coCCD>` for more details.
+
+   **Migration:** If the new pipeline breaks your workflow, set :ref:`nativeccd<option-flag-nativeccd>` to "disable".
 
 General
 ^^^^^^^
-- Add support for custom plots in the MuJoCo viewer by exposing a ``viewport`` property, a ``set_figures`` method,
-  and a ``clear_figures`` method.
-- Separate collision and deformation meshes for :ref:`flex<deformable-flex>`. This enables a fixed cost for the soft
-  body computations, while preserving the fidelity of high-resolution collisions.
-- Added :ref:`mjs_setDeepCopy` API function. When the deep copy flag is 0, attaching a model will not copy it to the
-  parent, so the original references to the child can be used to modify the parent after attachment. The default
-  behavior is to perform such a shallow copy. The old behavior of creating a deep copy of the child model while
-  attaching can be restored by setting the deep copy flag to 1.
-- Added :ref:`potential<sensor-e_potential>` and :ref:`kinetic<sensor-e_kinetic>` energy sensors.
-- Improved shadow rendering in the native renderer.
-- Moved ``introspect`` to ``python/introspect``.
+3. Add support for custom plots in the MuJoCo viewer by exposing a ``viewport`` property, a ``set_figures`` method,
+   and a ``clear_figures`` method.
+4. Separate collision and deformation meshes for :ref:`flex<deformable-flex>`. This enables a fixed cost for the soft
+   body computations, while preserving the fidelity of high-resolution collisions.
+5. Added :ref:`potential<sensor-e_potential>` and :ref:`kinetic<sensor-e_kinetic>` energy sensors.
+6. Improved shadow rendering in the native renderer.
+7. Moved ``introspect`` to ``python/introspect``.
 
 .. admonition:: Breaking API changes
    :class: attention
 
-   - Changes to inertia inference from meshes:
+   8. As mentioned above, the native convex collision detection pipeline is now the default, which may break some
+      workflows. In this case, set :ref:`nativeccd<option-flag-nativeccd>` to "disable" to restore the old behavior.
+   9. Added :ref:`mjs_setDeepCopy` API function. When the deep copy flag is 0, attaching a model will not copy it to the
+      parent, so the original references to the child can be used to modify the parent after attachment. The default
+      behavior is to perform such a shallow copy. The old behavior of creating a deep copy of the child model while
+      attaching can be restored by setting the deep copy flag to 1.
+   10. Changes to inertia inference from meshes:
 
-     Previously, in order to specify that the mass lies on the surface, :ref:`geom/shellinertia<body-geom-shellinertia>`
-     could be used for any geom type. Now this attribute is ignored if the geom is a mesh; instead, inertia inference
-     for meshes is specified in the asset, using the :ref:`asset/mesh/inertia<asset-mesh-inertia>` attribute.
+       Previously, in order to specify that the mass lies on the surface, :ref:`geom/shellinertia<body-geom-shellinertia>`
+       could be used for any geom type. Now this attribute is ignored if the geom is a mesh; instead, inertia inference
+       for meshes is specified in the asset, using the :ref:`asset/mesh/inertia<asset-mesh-inertia>` attribute.
 
-     Previously, if the volumetric inertia computation failed (for example due to a very flat mesh), the compiler
-     would silently fall back to surface inertia computation. Now, the compiler will throw an informative error.
+       Previously, if the volumetric inertia computation failed (for example due to a very flat mesh), the compiler
+       would silently fall back to surface inertia computation. Now, the compiler will throw an informative error.
+   11. Removed the composite type ``grid``. Users should instead use :ref:`flexcomp<body-flexcomp>`.
+   12. Removed the ``particle`` composite type. It is recommended to use the more generic :ref:`replicate<replicate>`
+       instead, see for example `this model
+       <https://github.com/google-deepmind/mujoco/blob/main/model/replicate/particle.xml>`__.
 
 MJX
 ^^^
-- Added support for spatial tendons with internal sphere and cylinder wrapping.
-- Fix a bug with box-box collisions :github:issue:`2356`.
+13. Added support for spatial tendons with internal sphere and cylinder wrapping.
+14. Fix a bug with box-box collisions :github:issue:`2356`.
 
 Python bindings
 ^^^^^^^^^^^^^^^
 
-- Added a pedagogical colab notebook for ``mujoco.rollout``, a Python module for multithreaded simulation rollouts.
-  It is available here |rollout_colab|.
-  |br| Contribution by :github:user:`aftersomemath`.
+15. Added a pedagogical colab notebook for ``mujoco.rollout``, a Python module for multithreaded simulation rollouts.
+    It is available here |rollout_colab|.
+    |br| Contribution by :github:user:`aftersomemath`.
 
 .. |rollout_colab| image:: https://colab.research.google.com/assets/colab-badge.svg
                    :target: https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/rollout.ipynb
@@ -180,8 +299,8 @@ General
 
 1. The Newton solver no longer requires ``nv*nv`` memory allocation, allowing for much larger models. See e.g.,
    `100_humanoids.xml  <https://github.com/google-deepmind/mujoco/blob/main/model/humanoid/100_humanoids.xml>`__.
-   Two quadratic-memory allocations still remain to be fully sparsified: ``mjData.actuator_moment`` and the matrices used
-   by the PGS solver.
+   Two quadratic-memory allocations still remain to be fully sparsified: ``mjData.actuator_moment`` and the matrices
+   used by the PGS solver.
 2. Removed the :at:`solid` and :at:`membrane` plugins and moved the associated computations into the engine. See `3D
    example model <https://github.com/google-deepmind/mujoco/blob/main/model/flex/floppy.xml>`__ and `2D example model
    <https://github.com/google-deepmind/mujoco/blob/main/model/flex/trampoline.xml>`__ for examples of flex objects

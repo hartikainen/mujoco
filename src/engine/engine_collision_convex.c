@@ -25,46 +25,62 @@
 #include <mujoco/mjmodel.h>
 #include "engine/engine_collision_gjk.h"
 #include "engine/engine_collision_primitive.h"
+#include "engine/engine_io.h"
 #include "engine/engine_util_blas.h"
 #include "engine/engine_util_errmem.h"
 #include "engine/engine_util_misc.h"
 #include "engine/engine_util_spatial.h"
 
+
+// allocate callback for EPA in nativeccd
+static void* ccd_allocate(void* data, size_t nbytes) {
+  mj_markStack((mjData*)data);
+  return mj_stackAllocByte((mjData*)data, nbytes, sizeof(mjtNum));
+}
+
+// free callback for EPA in nativeccd
+static void ccd_free(void* data, void* buffer) {
+  mj_freeStack((mjData*)data);
+}
+
 // call libccd or nativeccd to recover penetration info
 static int mjc_penetration(const mjModel* m, mjCCDObj* obj1, mjCCDObj* obj2,
                            const ccd_t* ccd, ccd_real_t* depth, ccd_vec3_t* dir, ccd_vec3_t* pos) {
-  if (mjENABLED(mjENBL_NATIVECCD)) {
-    mjCCDConfig config;
-    mjCCDStatus status;
-
-    // set config
-    config.max_iterations = ccd->max_iterations,
-    config.tolerance = ccd->mpr_tolerance,
-    config.max_contacts = 1;
-    config.dist_cutoff = 0;  // no geom distances needed
-
-    mjtNum dist = mjc_ccd(&config, &status, obj1, obj2);
-    if (dist < 0) {
-      if (depth) *depth = -dist;
-      if (dir) {
-        mju_sub3(dir->v, status.x1, status.x2);
-        mju_normalize3(dir->v);
-      }
-      if (pos) {
-        pos->v[0] = 0.5 * (status.x1[0] + status.x2[0]);
-        pos->v[1] = 0.5 * (status.x1[1] + status.x2[1]);
-        pos->v[2] = 0.5 * (status.x1[2] + status.x2[2]);
-      }
-      return 0;
-    }
-    if (depth) *depth = 0;
-    if (dir) mju_zero3(dir->v);
-    if (pos) mju_zero3(dir->v);
-    return 1;
+  // fallback to MPR
+  if (mjDISABLED(mjDSBL_NATIVECCD)) {
+    return ccdMPRPenetration(obj1, obj2, ccd, depth, dir, pos);
   }
 
-  // fallback to MPR
-  return ccdMPRPenetration(obj1, obj2, ccd, depth, dir, pos);
+  mjCCDConfig config;
+  mjCCDStatus status;
+
+  // set config
+  config.max_iterations = ccd->max_iterations,
+  config.tolerance = ccd->mpr_tolerance,
+  config.max_contacts = 1;
+  config.dist_cutoff = 0;  // no geom distances needed
+  config.context = (void*)obj1->data;
+  config.alloc = ccd_allocate;
+  config.free = ccd_free;
+
+  mjtNum dist = mjc_ccd(&config, &status, obj1, obj2);
+  if (dist < 0) {
+    if (depth) *depth = -dist;
+    if (dir) {
+      mju_sub3(dir->v, status.x1, status.x2);
+      mju_normalize3(dir->v);
+    }
+    if (pos) {
+      pos->v[0] = 0.5 * (status.x1[0] + status.x2[0]);
+      pos->v[1] = 0.5 * (status.x1[1] + status.x2[1]);
+      pos->v[2] = 0.5 * (status.x1[2] + status.x2[2]);
+    }
+    return 0;
+  }
+  if (depth) *depth = 0;
+  if (dir) mju_zero3(dir->v);
+  if (pos) mju_zero3(dir->v);
+  return 1;
 }
 
 
@@ -791,7 +807,7 @@ static void mjc_initCCD(ccd_t* ccd, const mjModel* m) {
 // find convex-convex collision
 static int mjc_CCDIteration(const mjModel* m, const mjData* d, mjCCDObj* obj1, mjCCDObj* obj2,
                             mjContact* con, int max_contacts, mjtNum margin) {
-  if (mjENABLED(mjENBL_NATIVECCD)) {
+  if (!mjDISABLED(mjDSBL_NATIVECCD)) {
     mjCCDConfig config;
     mjCCDStatus status;
 
@@ -800,6 +816,9 @@ static int mjc_CCDIteration(const mjModel* m, const mjData* d, mjCCDObj* obj1, m
     config.tolerance = m->opt.ccd_tolerance;
     config.max_contacts = max_contacts;
     config.dist_cutoff = 0;  // no geom distances needed
+    config.context = (void*)d;
+    config.alloc = ccd_allocate;
+    config.free = ccd_free;
 
     mjtNum dist = mjc_ccd(&config, &status, obj1, obj2);
     if (dist < 0) {
@@ -889,6 +908,35 @@ static void mju_rotateFrame(const mjtNum origin[3], const mjtNum rot[9],
 
 
 
+// return number of contacts supported by a single pass of narrowphase
+static int maxContacts(const mjCCDObj* obj1, const mjCCDObj* obj2) {
+  const mjModel* m = obj1->model;
+
+  // single pass not supported for margins
+  if (obj1->margin > 0 || obj2->margin > 0) {
+    return 1;
+  }
+
+  // can return 8 contacts for box-box collision in one pass
+  int type1 = m->geom_type[obj1->geom];
+  int type2 = m->geom_type[obj2->geom];
+  if (type1 == mjGEOM_BOX && type2 == mjGEOM_BOX) {
+    return 8;
+  }
+
+  // reduce mesh collisions to 4 contacts max
+  if (type1 == mjGEOM_BOX || type1 == mjGEOM_MESH) {
+    if (type2 == mjGEOM_BOX || type2 == mjGEOM_MESH) {
+      return mjENABLED(mjENBL_MULTICCD) ? 4 : 1;
+    }
+  }
+
+  // not supported for other geom types
+  return 1;
+}
+
+
+
 // multi-point convex-convex collision, using libccd
 int mjc_Convex(const mjModel* m, const mjData* d,
                mjContact* con, int g1, int g2, mjtNum margin) {
@@ -896,18 +944,14 @@ int mjc_Convex(const mjModel* m, const mjData* d,
   mjCCDObj obj1, obj2;
   mjc_initCCDObj(&obj1, m, d, g1, margin);
   mjc_initCCDObj(&obj2, m, d, g2, margin);
-  int max_contacts = 1;
-  if (mjENABLED(mjENBL_MULTICCD)) {
-    // TODO(kylebayes): Support contact pruning.
-    max_contacts = 8;
-  }
+  int max_contacts = maxContacts(&obj1, &obj2);
 
   // find initial contact
   int ncon = mjc_CCDIteration(m, d, &obj1, &obj2, con, max_contacts, margin);
 
-  // nativeccd supports multi Box-Box collision directly
-  if (mjENABLED(mjENBL_NATIVECCD) && m->geom_type[g1] == mjGEOM_BOX
-      && m->geom_type[g2] == mjGEOM_BOX) {
+
+  // no additional contacts needed
+  if (!mjDISABLED(mjDSBL_NATIVECCD) && max_contacts > 1) {
     return ncon;
   }
 

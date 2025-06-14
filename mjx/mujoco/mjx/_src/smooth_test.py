@@ -17,10 +17,11 @@
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax
+from jax import numpy as jp
 import mujoco
 from mujoco import mjx
 from mujoco.mjx._src import test_util
-from mujoco.mjx._src.types import ConeType
+from mujoco.mjx._src.types import ConeType  # pylint: disable=g-importing-member
 import numpy as np
 
 # tolerance for difference between MuJoCo and MJX smooth calculations - mostly
@@ -78,33 +79,37 @@ class SmoothTest(absltest.TestCase):
     # com_pos
     dx = jax.jit(mjx.com_pos)(mx, mjx.put_data(m, d))
     _assert_attr_eq(d, dx, 'subtree_com')
-    _assert_attr_eq(d, dx, 'cinert')
-    _assert_attr_eq(d, dx, 'cdof')
+    _assert_attr_eq(d, dx._impl, 'cinert')
+    _assert_attr_eq(d, dx._impl, 'cdof')
     # camlight
     dx = jax.jit(mjx.camlight)(mx, mjx.put_data(m, d))
     _assert_attr_eq(d, dx, 'cam_xpos')
     _assert_eq(d.cam_xmat.reshape((-1, 3, 3)), dx.cam_xmat, 'cam_xmat')
     # crb
     dx = jax.jit(mjx.crb)(mx, mjx.put_data(m, d))
-    _assert_attr_eq(d, dx, 'crb')
-    _assert_attr_eq(d, dx, 'qM')
-    _assert_eq(dx._qM_sparse, np.zeros(0), '_qM_sparse')
+    _assert_attr_eq(d, dx._impl, 'crb')
+    _assert_attr_eq(d, dx._impl, 'qM')
     # factor_m
     dx = jax.jit(mjx.factor_m)(mx, mjx.put_data(m, d))
     qLDLegacy = np.zeros(mx.nM)  # pylint:disable=invalid-name
     for i in range(m.nC):
-      qLDLegacy[d.mapM2C[i]] = d.qLD[i]
-    _assert_eq(qLDLegacy, dx.qLD, 'qLD')
-    _assert_attr_eq(d, dx, 'qLDiagInv')
-    _assert_eq(dx._qLD_sparse, np.zeros(0), '_qLD_sparse')
-    _assert_eq(dx._qLDiagInv_sparse, np.zeros(0), '_qLDiagInv_sparse')
+      qLDLegacy[d.mapM2M[i]] = d.qLD[i]
+    _assert_eq(qLDLegacy, dx._impl.qLD, 'qLD')
+    _assert_attr_eq(d, dx._impl, 'qLDiagInv')
     # com_vel
     dx = jax.jit(mjx.com_vel)(mx, mjx.put_data(m, d))
     _assert_attr_eq(d, dx, 'cvel')
-    _assert_attr_eq(d, dx, 'cdof_dot')
+    _assert_attr_eq(d, dx._impl, 'cdof_dot')
     # rne
     dx = jax.jit(mjx.rne)(mx, mjx.put_data(m, d))
     _assert_attr_eq(d, dx, 'qfrc_bias')
+    # rne (flg_acc=True)
+    qfrc_bias = np.zeros(m.nv)
+    mujoco.mj_rne(m, d, 1, qfrc_bias)
+    dx = jax.jit(mjx.rne, static_argnums=(2,))(
+        mx, mjx.put_data(m, d), flg_acc=True
+    )
+    _assert_eq(dx.qfrc_bias, qfrc_bias, 'qfrc_bias')
 
     # set dense jacobian for tendon:
     m.opt.jacobian = mujoco.mjtJacobian.mjJAC_DENSE
@@ -115,11 +120,11 @@ class SmoothTest(absltest.TestCase):
     mujoco.mj_forward(m, d)
     # tendon
     dx = jax.jit(mjx.tendon)(mx, mjx.put_data(m, d))
-    _assert_attr_eq(d, dx, 'ten_J')
-    _assert_attr_eq(d, dx, 'ten_length')
+    _assert_attr_eq(d, dx._impl, 'ten_J')
+    _assert_attr_eq(d, dx._impl, 'ten_length')
     # transmission
     dx = jax.jit(mjx.transmission)(mx, dx)
-    _assert_attr_eq(d, dx, 'actuator_length')
+    _assert_attr_eq(d, dx._impl, 'actuator_length')
 
     # convert sparse actuator_moment to dense representation
     moment = np.zeros((m.nu, m.nv))
@@ -130,7 +135,7 @@ class SmoothTest(absltest.TestCase):
         d.moment_rowadr,
         d.moment_colind,
     )
-    _assert_eq(moment, dx.actuator_moment, 'actuator_moment')
+    _assert_eq(moment, dx._impl.actuator_moment, 'actuator_moment')
 
   def test_disable_gravity(self):
     m = mujoco.MjModel.from_xml_string("""
@@ -190,7 +195,7 @@ class SmoothTest(absltest.TestCase):
 
     mujoco.mj_transmission(m, d)
     dx = jax.jit(mjx.transmission)(mx, dx)
-    _assert_attr_eq(d, dx, 'actuator_length')
+    _assert_attr_eq(d, dx._impl, 'actuator_length')
 
     # convert sparse actuator_moment to dense representation
     moment = np.zeros((m.nu, m.nv))
@@ -201,7 +206,7 @@ class SmoothTest(absltest.TestCase):
         d.moment_rowadr,
         d.moment_colind,
     )
-    _assert_eq(moment, dx.actuator_moment, 'actuator_moment')
+    _assert_eq(moment, dx._impl.actuator_moment, 'actuator_moment')
 
   def test_subtree_vel(self):
     """Tests MJX subtree_vel function matches MuJoCo mj_subtreeVel."""
@@ -219,8 +224,8 @@ class SmoothTest(absltest.TestCase):
     mujoco.mj_subtreeVel(m, d)
     dx = jax.jit(mjx.subtree_vel)(mx, dx)
 
-    _assert_attr_eq(d, dx, 'subtree_linvel')
-    _assert_attr_eq(d, dx, 'subtree_angmom')
+    _assert_attr_eq(d, dx._impl, 'subtree_linvel')
+    _assert_attr_eq(d, dx._impl, 'subtree_angmom')
 
 
 class RnePostConstraintTest(parameterized.TestCase):
@@ -271,9 +276,9 @@ class RnePostConstraintTest(parameterized.TestCase):
     mujoco.mj_rnePostConstraint(m, d)
     dx = jax.jit(mjx.rne_postconstraint)(mx, dx)
 
-    _assert_eq(d.cacc, dx.cacc, 'cacc')
-    _assert_eq(d.cfrc_ext, dx.cfrc_ext, 'cfrc_ext')
-    _assert_eq(d.cfrc_int, dx.cfrc_int, 'cfrc_int')
+    _assert_eq(d.cacc, dx._impl.cacc, 'cacc')
+    _assert_eq(d.cfrc_ext, dx._impl.cfrc_ext, 'cfrc_ext')
+    _assert_eq(d.cfrc_int, dx._impl.cfrc_int, 'cfrc_int')
 
 
 class TendonTest(parameterized.TestCase):
@@ -305,12 +310,64 @@ class TendonTest(parameterized.TestCase):
     mujoco.mj_forward(m, d)
     dx = jax.jit(mjx.forward)(mx, dx)
 
-    _assert_eq(d.ten_length, dx.ten_length, 'ten_length')
-    _assert_eq(d.ten_J, dx.ten_J, 'ten_J')
-    _assert_eq(d.ten_wrapnum, dx.ten_wrapnum, 'ten_wrapnum')
-    _assert_eq(d.ten_wrapadr, dx.ten_wrapadr, 'ten_wrapadr')
-    _assert_eq(d.wrap_obj, dx.wrap_obj, 'wrap_obj')
-    _assert_eq(d.wrap_xpos, dx.wrap_xpos, 'wrap_xpos')
+    _assert_eq(d.ten_length, dx._impl.ten_length, 'ten_length')
+    _assert_eq(d.ten_J, dx._impl.ten_J, 'ten_J')
+    _assert_eq(d.ten_wrapnum, dx._impl.ten_wrapnum, 'ten_wrapnum')
+    _assert_eq(d.ten_wrapadr, dx._impl.ten_wrapadr, 'ten_wrapadr')
+    _assert_eq(d.wrap_obj, dx._impl.wrap_obj, 'wrap_obj')
+    _assert_eq(d.wrap_xpos, dx._impl.wrap_xpos, 'wrap_xpos')
+
+  def test_tendon_armature(self):
+    """Tests MJX tendon armature matches MuJoCo."""
+    m = mujoco.MjModel.from_xml_string("""
+        <mujoco>
+          <worldbody>
+            <site name="site0" pos="1 0 1"/>
+            <body>
+              <joint type="slide" axis="0 0 1"/>
+              <joint type="hinge" axis="0 1 0"/>
+              <geom type="box" size="0.1 0.1 0.1" mass="1" pos="1 0 0"/>
+              <site name="site1"/>
+            </body>
+          </worldbody>
+          <tendon>
+            <spatial armature="123">
+              <site site="site0"/>
+              <site site="site1"/>
+            </spatial>
+            <spatial armature="456">
+              <site site="site0"/>
+              <site site="site1"/>
+            </spatial>
+          </tendon>
+          <keyframe>
+            <key qpos="1.2345 1.2345" qvel="1.2345 1.2345"/>
+          </keyframe>
+        </mujoco>
+        """)
+
+    d = mujoco.MjData(m)
+    mujoco.mj_resetDataKeyframe(m, d, 0)
+    mujoco.mj_forward(m, d)
+
+    qM = np.zeros((m.nv, m.nv))  # pylint: disable=invalid-name
+    mujoco.mj_fullM(m, qM, d.qM)
+
+    mx = mjx.put_model(m)
+    dx = mjx.put_data(m, d)
+
+    dx = dx.tree_replace(
+        {'_impl.qM': jp.zeros((m.nv, m.nv)), 'qfrc_bias': jp.zeros(m.nv)}
+    )
+
+    dx = mjx.crb(mx, dx)
+    dx = mjx.tendon_armature(mx, dx)
+
+    _assert_eq(dx._impl.qM, qM, 'qM')
+
+    dx = mjx.rne(mx, dx)
+    dx = mjx.tendon_bias(mx, dx)
+    _assert_eq(dx.qfrc_bias, d.qfrc_bias, 'qfrc_bias')
 
 
 if __name__ == '__main__':

@@ -105,10 +105,10 @@ static void set0(mjModel* m, mjData* d) {
   }
 
   // run remaining computations
-  mj_crb(m, d);
+  mj_tendon(m, d);
+  mj_makeM(m, d);
   mj_factorM(m, d);
   mj_flex(m, d);
-  mj_tendon(m, d);
   mj_transmission(m, d);
 
   if (flex_rigid_cache) {
