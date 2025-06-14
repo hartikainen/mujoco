@@ -1,0 +1,40 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["@mujoco//:__subpackages__"])
+
+exports_files(["LICENSE"])
+
+cc_library(
+    name = "SdfLib",
+    srcs = glob([
+        "src/sdf/*.cpp",
+        "src/utils/*.cpp",
+    ]),
+    hdrs = glob([
+        "src/sdf/*.h",
+        "include/SdfLib/*.h",
+        "include/SdfLib/utils/*.h",
+        "libs/InteractiveComputerGraphics/InteractiveComputerGraphics/TriangleMeshDistance.h",
+    ]),
+    deps = [
+        "@glm//:glm",
+        "@cereal//:cereal",
+        "@spdlog//:spdlog",
+    ],
+    includes = [
+        "include",
+        "libs/InteractiveComputerGraphics",
+        "src",
+    ],
+    copts = [
+        "-Wno-error=switch",
+        "-Wno-switch",
+        "-Wno-sign-compare",
+        "-Wno-unused-variable",
+        "-Wno-unused-lambda-capture",
+        "-Wno-pessimizing-move",
+        # "-isystem external/glm",
+        "-Iexternal/glm~",
+    ],
+)
