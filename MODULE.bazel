@@ -53,23 +53,7 @@ pip.parse(
 )
 use_repo(pip, "pypi")
 
-# GLFW_VERSION = "3.4"
-# bazel_dep(name = "glfw", version = "0.0.0")
-# archive_override(
-#     module_name = "glfw",
-#     # name = "libglfw3",
-#     build_file = "@//third_party/glfw:BUILD.bazel",
-#     patch_cmds = [
-#         """cat <<EOF >MODULE.bazel
-# module(name = "glfw")
-# bazel_dep(name = "bazel_skylib", version="1.7.1")
-# bazel_dep(name = "rules_cc", version="0.1.1")
-# EOF""",
-#     ],
-#     integrity = "sha256-wDjTQgAjTQcfrpNFvEVeSo8vVEq2AVB2XXcE4I89rAE=",
-#     strip_prefix = "glfw-{0}".format(GLFW_VERSION),
-#     urls = ["https://github.com/glfw/glfw/archive/refs/tags/{0}.tar.gz".format(GLFW_VERSION)],
-# )
+# For GLFW stuff: https://github.com/SharkMan201/dev_monorepo
 
 # LIBGLVND_VERSION = "1.2.0"
 # bazel_dep(name = "libglvnd", version = "0.0.0")
