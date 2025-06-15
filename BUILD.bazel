@@ -1,5 +1,5 @@
 load("@mujoco//tools:symlink_files.bzl", "symlink_files")
-load("@com_github_bazelbuild_buildtools//buildifier:def.bzl", "buildifier")
+# TODO(hartikainen): Add buildifier
 load("@mujoco//tools:def.bzl", "mj_cc_library")
 
 package(default_visibility = ["@mujoco//:__subpackages__"])
@@ -168,6 +168,4 @@ symlink_files(
     strip_prefix = "test/",
 )
 
-buildifier(
-    name = "buildifier",
-)
+# TODO(hartikainen): Add buildifier.
