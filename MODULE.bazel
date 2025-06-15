@@ -92,13 +92,7 @@ bazel_dep(name = "lodepng", version = "0.0.0")
 archive_override(
     module_name = "lodepng",
     build_file = "@//third_party/lodepng:BUILD.bazel",
-    patch_cmds = [
-        """cat <<EOF >MODULE.bazel
-module(name = "lodepng")
-bazel_dep(name = "bazel_skylib", version="1.7.1")
-bazel_dep(name = "rules_cc", version="0.1.1")
-EOF""",
-    ],
+    patches = ["//third_party/lodepng:add_MODULE.bazel.patch"],
     integrity = "sha256-tn5Ga6ZZwHrHddB9vZevMZzeRJzhSr7Zrllt8p2IhgM=",
     strip_prefix = "lodepng-{0}".format(LODEPNG_VERSION),
     urls = ["https://github.com/lvandeve/lodepng/archive/{0}.tar.gz".format(LODEPNG_VERSION)],
