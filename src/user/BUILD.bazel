@@ -87,7 +87,7 @@ mj_cc_library(
         "//src/engine:engine_plugin",
         "//src/engine:engine_util_errmem",
         "//src/engine:engine_util_misc",
-        "@MarchingCubeCpp",
+        "@marchingcubecpp",
         "@lodepng",
         "@qhull//:libqhull_r",
         "@tinyobjloader",
