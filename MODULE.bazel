@@ -1,27 +1,27 @@
 """Multi-Joint dynamics with Contact. A general purpose physics simulator."""
 
-module(name = "mujoco", version = "3.2.6")
+module(name = "mujoco", version = "3.3.3")
 
 bazel_dep(name = "rules_cc", version = "0.1.1")
-bazel_dep(name = "rules_python", version = "1.0.0")
+bazel_dep(name = "rules_python", version = "1.5.0-rc0")
 bazel_dep(name = "pybind11_bazel", version = "2.13.6")
-bazel_dep(name = "aspect_bazel_lib", version = "2.10.0")
-bazel_dep(name = "buildifier_prebuilt", version = "7.3.1", dev_dependency = True)
-bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "aspect_bazel_lib", version = "2.19.3")
+bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
+bazel_dep(name = "platforms", version = "1.0.0")
 
 # TODO(hartikainen) move transitive dependencies elsewhere?
 bazel_dep(name = "ccd", version = "2.1.0")
 bazel_dep(name = "cereal", version = "1.3.2")
 bazel_dep(name = "glfw", version = "3.3.9")
-bazel_dep(name = "glm", version = "0.9.9.8")
-bazel_dep(name = "spdlog", version = "1.15.0")
+bazel_dep(name = "glm", version = "1.0.1")  # should be 1.0.1
+bazel_dep(name = "spdlog", version = "1.15.2")
 bazel_dep(name = "tinyobjloader", version = "2.0.0-rc1")
 bazel_dep(name = "abseil-cpp", version = "20250512.0")
 bazel_dep(name = "qhull", version = "8.0.2")
 bazel_dep(name = "tinyxml2", version = "10.0.0")
-bazel_dep(name = "googletest", version = "1.15.2")
-bazel_dep(name = "google_benchmark", version = "1.8.5")
-bazel_dep(name = "eigen", version = "4.0.0-20241125.bcr.1")
+bazel_dep(name = "googletest", version = "1.17.0")
+bazel_dep(name = "google_benchmark", version = "1.9.4")
+bazel_dep(name = "eigen", version = "4.0.0-20241125.bcr.2")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
