@@ -4,10 +4,11 @@ filegroup(
     name = "model",
     srcs = glob([
         "**/*.xml",
-        "**/*.msh",
-        "**/*.usda",
         "**/*.stl",
         "**/*.obj",
         "**/*.png",
-    ]),
+    ]) + glob([
+        "**/*.msh",  # TODO(hartikainen): why no files?
+        "**/*.usda",  # TODO(hartikainen): why no files?
+    ], allow_empty = True),
 )
