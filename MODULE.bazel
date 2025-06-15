@@ -102,20 +102,16 @@ MARCHING_CUBE_CPP_VERSION = "f03a1b3ec29b1d7d865691ca8aea4f1eb2c2873d"
 bazel_dep(name = "marchingcubecpp", version = "0.0.0")
 archive_override(
     module_name = "marchingcubecpp",
-    build_file = "@mujoco//tools/workspace/MarchingCubeCpp:BUILD.bazel",
-    patch_cmds = [
-        """cat <<EOF >MODULE.bazel
-module(name = "marchingcubecpp")
-bazel_dep(name = "bazel_skylib", version="1.7.1")
-bazel_dep(name = "rules_cc", version="0.1.1")
-EOF""",
+    build_file = "@//third_party/MarchingCubeCpp:BUILD.bazel",
+    patches = [
+        "//third_party/MarchingCubeCpp:add_MODULE.bazel.patch",
+        "//third_party/MarchingCubeCpp:add_LICENSE.patch",
     ],
     integrity = "sha256-InwQss/+iGRUuSoOnvnwyejgAdAOoVbMN8j8QwVcnKY=",
     strip_prefix = "MarchingCubeCpp-{0}".format(MARCHING_CUBE_CPP_VERSION),
     urls = ["https://github.com/aparis69/MarchingCubeCpp/archive/{0}.tar.gz".format(MARCHING_CUBE_CPP_VERSION)],
 )
 
-# bazel_dep(name = "MarchingCubeCpp", version = "-")
 # bazel_dep(name = "libglvnd", version = "-")
 
 # bazel_dep(name = "glew", version = "2.2.0")

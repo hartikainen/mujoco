@@ -1,0 +1,23 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "MarchingCubeCpp",
+    hdrs = ["MC.h"],
+    includes = ["."],
+    data = [":license_filegroup"],
+)
+
+filegroup(
+    # MarchinCubeCpp repository declares its license as follows:
+    # > Double Licence, whatever fits you best: Public domain or MIT License.
+    # [https://github.com/aparis69/MarchingCubeCpp#licence]
+    #
+    # It does not provide a `LICENSE` file, however. Therefore, we include a
+    # `LICENSE` file for MIT license here in the MuJoCo repository and
+    # reference it accordingly.
+    name = "license_filegroup",
+    srcs = ["LICENSE"],
+    tags = ["license_filegroup"],
+)
