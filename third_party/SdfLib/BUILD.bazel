@@ -1,9 +1,6 @@
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-package(default_visibility = ["@mujoco//:__subpackages__"])
-
-exports_files(["LICENSE"])
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "SdfLib",
@@ -20,7 +17,9 @@ cc_library(
     deps = [
         "@glm//:glm",
         "@cereal//:cereal",
+        # "@eigen//:eigen",
         "@spdlog//:spdlog",
+        # "@zlib//:zlib",
     ],
     includes = [
         "include",
@@ -35,6 +34,21 @@ cc_library(
         "-Wno-unused-lambda-capture",
         "-Wno-pessimizing-move",
         # "-isystem external/glm",
-        "-Iexternal/glm~",
     ],
+    linkopts = select({
+        "@platforms//os:linux": [
+            "-lGL",
+        ],
+        "@platforms//os:windows": [
+            "-DEFAULTLIB:opengl32.lib",
+        ],
+        "//conditions:default": [],
+    }),
+    data = [":license_filegroup"],
+)
+
+filegroup(
+    name = "license_filegroup",
+    srcs = ["LICENSE"],
+    tags = ["license_filegroup"],
 )

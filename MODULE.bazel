@@ -77,16 +77,10 @@ bazel_dep(name = "sdflib", version = "0.0.0")
 archive_override(
     # NOTE(hartikainen): valid names must 1) only contain lowercase letters (a-z), digits (0-9), dots (.), hyphens (-), and underscores (_); 2) begin with a lowercase letter; 3) end with a lowercase letter or digit.
     module_name = "sdflib",
-    build_file = "@//third_party/SdfLib:BUILD.bazel2",
-    patch_cmds = [
-        """cat <<EOF >MODULE.bazel
-module(name = "sdflib")
-bazel_dep(name = "bazel_skylib", version="1.7.1")
-bazel_dep(name = "cereal", version = "1.3.2")
-bazel_dep(name = "glm", version = "0.9.9.8")
-bazel_dep(name = "rules_cc", version="0.1.1")
-bazel_dep(name = "spdlog", version = "1.15.0")
-EOF""",
+    build_file = "//third_party/SdfLib:BUILD.bazel",
+    patches = [
+        "//third_party/SdfLib:add_MODULE.bazel.patch",
+        "//third_party/SdfLib:add_.bazelignore.patch",
     ],
     integrity = "sha256-/2CBlU0FBB9fWDvmnfyXSacQMNjaZLS5p1djUJEbgGo=",
     strip_prefix = "SdfLib-{0}".format(SDFLIB_VERSION),

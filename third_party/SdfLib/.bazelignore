@@ -1,0 +1,7 @@
+.github/media
+.gitignore
+CMakeConfig.txt
+CMakeLists.txt
+# LICENSE
+README.md
+SdfLibConfig.cmake.in

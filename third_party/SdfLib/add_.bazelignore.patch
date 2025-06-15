@@ -1,0 +1,10 @@
+--- /dev/null	2025-06-12 10:55:00.756383975 -0400
++++ third_party/SdfLib/.bazelignore	2025-06-15 14:13:50.240932946 -0400
+@@ -0,0 +1,7 @@
++.github/media
++.gitignore
++CMakeConfig.txt
++CMakeLists.txt
++# LICENSE
++README.md
++SdfLibConfig.cmake.in
