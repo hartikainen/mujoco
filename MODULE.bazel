@@ -10,7 +10,7 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = Tr
 bazel_dep(name = "platforms", version = "1.0.0")
 
 # TODO(hartikainen) move transitive dependencies elsewhere?
-# bazel_dep(name = "ccd", version = "2.1.0")  # not used anywhere?
+bazel_dep(name = "ccd", version = "2.1.0", repo_name = "libccd")
 # bazel_dep(name = "cereal", version = "1.3.2")  # transitive of `SdfLib`
 bazel_dep(name = "glfw", version = "3.3.9")
 # bazel_dep(name = "glm", version = "1.0.1")  # transitive of `SdfLib`
@@ -73,7 +73,7 @@ LODEPNG_VERSION = "b4ed2cd7ecf61d29076169b49199371456d4f90b"
 bazel_dep(name = "lodepng", version = "0.0.0")
 archive_override(
     module_name = "lodepng",
-    build_file = "@//third_party/lodepng:BUILD.bazel",
+    build_file = "//third_party/lodepng:BUILD.bazel",
     patches = ["//third_party/lodepng:add_MODULE.bazel.patch"],
     integrity = "sha256-tn5Ga6ZZwHrHddB9vZevMZzeRJzhSr7Zrllt8p2IhgM=",
     strip_prefix = "lodepng-{0}".format(LODEPNG_VERSION),
@@ -84,7 +84,7 @@ MARCHING_CUBE_CPP_VERSION = "f03a1b3ec29b1d7d865691ca8aea4f1eb2c2873d"
 bazel_dep(name = "marchingcubecpp", version = "0.0.0")
 archive_override(
     module_name = "marchingcubecpp",
-    build_file = "@//third_party/MarchingCubeCpp:BUILD.bazel",
+    build_file = "//third_party/MarchingCubeCpp:BUILD.bazel",
     patches = [
         "//third_party/MarchingCubeCpp:add_MODULE.bazel.patch",
         "//third_party/MarchingCubeCpp:add_LICENSE.patch",
