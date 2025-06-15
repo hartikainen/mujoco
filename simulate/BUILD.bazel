@@ -21,7 +21,8 @@ mj_cc_library(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//:mujoco",
-        "@libglfw3//:lib",
+        # "@libglfw3//:lib",  # TODO(hartikainen)
+        "@glfw//:lib",
     ],
 )
 
