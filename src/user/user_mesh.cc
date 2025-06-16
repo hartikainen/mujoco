@@ -66,7 +66,8 @@
 #include "user/user_util.h"
 
 extern "C" {
-#include "qhull_ra.h"
+// TODO(hartikainen): is this okay? Why doesn't bazel work without `libqhull_r` prefix?
+#include "libqhull_r/qhull_ra.h"
 }
 
 namespace {

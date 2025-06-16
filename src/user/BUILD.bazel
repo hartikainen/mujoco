@@ -65,7 +65,7 @@ mj_cc_library(
         "-Wno-error=unknown-pragmas",
         "-fexceptions",
         "-Isrc",
-        "-Iexternal/qhull/src/libqhull_r",
+        # "-Iexternal/qhull/src/libqhull_r",  TODO(hartikainen)
     ],
     features = ["-use_header_modules"],
     local_defines = [
