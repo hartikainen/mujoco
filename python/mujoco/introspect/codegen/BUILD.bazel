@@ -1,5 +1,4 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("@pypi//:requirements.bzl", "requirement")
 
 # This genrule is non-hermetic and uses the system-installed clang.
 genrule(
@@ -26,7 +25,7 @@ py_binary(
     deps = [
         ":formatter",
         "//python/mujoco/introspect:ast_nodes",
-        requirement("absl-py"),
+        "@pypi//absl_py",
         "@abseil-cpp//absl/flags:flag",
     ],
 )
@@ -40,10 +39,11 @@ genrule(
     outs = ["enums.py"],
     cmd = """
     MUJOCO_H=$$(find $(locations //:mujoco_headers) -name mujoco.h)
-    $(location :generate_enums) \
+    $(PYTHON3) $(location :generate_enums) \
         --json_path=$(location mujoco.h.json) > $@
     """,
     tools = [":generate_enums"],
+    toolchains=["@rules_python//python:current_py_toolchain"],
 )
 
 py_binary(
@@ -53,7 +53,7 @@ py_binary(
         ":formatter",
         "//python/mujoco/introspect:ast_nodes",
         "//python/mujoco/introspect:type_parsing",
-        requirement("absl-py"),
+        "@pypi//absl_py",
         "@abseil-cpp//absl/flags:flag",
     ],
 )
@@ -67,11 +67,12 @@ genrule(
     outs = ["functions.py"],
     cmd = """
     MUJOCO_H=$$(find $(locations //:mujoco_headers) -name mujoco.h)
-    $(location :generate_functions) \
+    $(PYTHON3) $(location :generate_functions) \
         --header_path=$${MUJOCO_H} \
         --json_path=$(location mujoco.h.json) > $@
     """,
     tools = [":generate_functions"],
+    toolchains=["@rules_python//python:current_py_toolchain"],
 )
 
 py_binary(
@@ -81,7 +82,7 @@ py_binary(
         ":formatter",
         "//python/mujoco/introspect:ast_nodes",
         "//python/mujoco/introspect:type_parsing",
-        requirement("absl-py"),
+        "@pypi//absl_py",
         "@abseil-cpp//absl/flags:flag",
     ],
 )
@@ -95,10 +96,11 @@ genrule(
     outs = ["structs.py"],
     cmd = """
     MUJOCO_H=$$(find $(locations //:mujoco_headers) -name mujoco.h)
-    $(location :generate_structs) \
+    $(PYTHON3) $(location :generate_structs) \
         --json_path=$(location mujoco.h.json) > $@
     """,
     tools = [":generate_structs"],
+    toolchains=["@rules_python//python:current_py_toolchain"],
 )
 
 py_library(
