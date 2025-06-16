@@ -1,0 +1,10 @@
+services:
+  dev:
+    build: .
+    volumes:
+      - ./:/app
+      - bazel_cache:/root/.cache/bazel
+    command: sleep infinity
+
+volumes:
+  bazel_cache:
