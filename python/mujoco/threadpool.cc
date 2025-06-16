@@ -20,7 +20,8 @@
 #include <thread>
 #include <utility>
 
-#include <absl/base/attributes.h>
+// TODO(hartikainen): I don't know how to make this work as <absl/base/attributes.h>
+#include "absl/base/attributes.h"
 
 namespace mujoco::python {
 
