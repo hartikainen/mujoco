@@ -22,7 +22,7 @@ mj_cc_library(
     deps = [
         "//:mujoco",
         # "@libglfw3//:lib",  # TODO(hartikainen)
-        "@glfw//:lib",
+        "@glfw//:glfw",
     ],
 )
 

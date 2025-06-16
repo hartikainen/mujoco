@@ -316,7 +316,7 @@ pybind_extension(
         ":structs_header",
         "//simulate:simulate_lib",
         # "@libglfw3//:lib",  # TODO(hartikainen)
-        "@glfw//:lib",
+        "@glfw//:glfw",
     ],
 )
 

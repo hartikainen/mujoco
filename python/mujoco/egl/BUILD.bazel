@@ -9,6 +9,6 @@ py_library(
     tags = ["keep_dep"],
     deps = [
         # "@libglfw3//:lib",  # TODO(hartikainen)
-        "@glfw//:lib",
+        "@glfw//:glfw",
     ],
 )

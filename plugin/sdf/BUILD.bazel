@@ -102,7 +102,7 @@ mj_cc_library(
     deps = [
         ":sdf_impl",
         "//:mujoco_hdrs",
-        "@sdflib",
+        "@sdflib//:SdfLib",
     ],
     alwayslink = True,
 )
@@ -129,7 +129,7 @@ mj_cc_library(
         ":sdflib",
         ":torus",
         "//:mujoco_hdrs",
-        "@sdflib",
+        "@sdflib//:SdfLib",
     ],
     alwayslink = True,
 )

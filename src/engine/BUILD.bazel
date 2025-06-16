@@ -86,7 +86,7 @@ mj_cc_library(
         "//:mujoco_hdrs",
         "//src/thread:thread_pool",
         "//src/thread:thread_task",
-        "@libccd",
+        "@libccd//:ccd",
     ],
 )
 
@@ -175,7 +175,7 @@ mj_cc_library(
         ":engine_util_misc",
         ":engine_util_spatial",
         "//:mujoco_hdrs",
-        "@libccd",
+        "@libccd//:ccd",
     ],
 )
 
