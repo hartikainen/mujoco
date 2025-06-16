@@ -33,7 +33,7 @@
 #include <mujoco/mjtnum.h>
 #include "user/user_cache.h"
 #include "user/user_util.h"
-#include <tiny_obj_loader.h>
+#include "tiny_obj_loader.h"
 
 using face_vertices_type =
     decltype(tinyobj::mesh_t::num_face_vertices)::value_type;
