@@ -65,3 +65,4 @@ from mujoco.mjx._src.support import name2id
 from mujoco.mjx._src.support import xfrc_accumulate
 from mujoco.mjx._src.test_util import benchmark
 from mujoco.mjx._src.types import *
+from mujoco.mjx._src.render import create_render_context
