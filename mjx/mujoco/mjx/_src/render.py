@@ -14,6 +14,9 @@
 # ==============================================================================
 """Render + RenderContextRegistry helpers."""
 
+from typing import Any
+import flax
+import threading
 # pylint: disable=g-importing-member
 from mujoco.mjx._src.types import Data
 from mujoco.mjx._src.types import Impl
@@ -23,10 +26,11 @@ import mujoco
 import mujoco.mjx.warp as mjxw
 
 
-def render(m: Model, d: Data) -> Data:
+def render(m: Model, d: Data, ctx: Any) -> Data:
   """Render."""
   if m.impl == Impl.WARP and d.impl == Impl.WARP and mjxw.WARP_INSTALLED:
     from mujoco.mjx.warp import render as mjxw_render  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
+    d = d.replace(_render_context=ctx)
     return mjxw_render.render(m, d)
 
   raise NotImplementedError(f'render only implemented for Warp backend.')
@@ -48,11 +52,9 @@ def create_render_context(
 ):
   """Render."""
   if m.impl == Impl.WARP and d.impl == Impl.WARP and mjxw.WARP_INSTALLED:
-    from mujoco.mjx.warp import create_render_context as mjxw_create_render_context  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
-    return mjxw_create_render_context(
+    from mujoco.mjx.warp import render as mjxw_render  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
+    return mjxw_render.create_render_context_in_registry(
       mjm,
-      m,
-      d,
       nworld,
       width,
       height,

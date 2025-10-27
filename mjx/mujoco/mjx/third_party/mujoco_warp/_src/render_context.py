@@ -4,6 +4,7 @@ import warp as wp
 import mujoco
 import threading
 
+from mujoco.mjx.third_party import mujoco_warp as mjw
 from mujoco.mjx.third_party.mujoco_warp._src.types import Model
 from mujoco.mjx.third_party.mujoco_warp._src.types import Data
 from mujoco.mjx.third_party.mujoco_warp._src.types import GeomType
@@ -134,13 +135,10 @@ def _create_packed_texture_data(mjm: mujoco.MjModel) -> tuple[wp.array, wp.array
   return tex_data_packed, wp.array(tex_adr_packed, dtype=int)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class RenderContextRegistry:
   key: int
 
-  def __init__(self, key: int):
-    self.key = key
-  
   def __del__(self):
     with threading.Lock():
       del _RENDER_CONTEXT_BUFFERS[self.key]
