@@ -17,7 +17,7 @@
 
 # isort: off
 from mujoco.mjx.third_party.mujoco_warp._src.forward import step as step
-from mujoco.mjx.third_party.mujoco_warp._src.render_context import render as render
+from mujoco.mjx.third_party.mujoco_warp._src.render import render as render
 from mujoco.mjx.third_party.mujoco_warp._src.types import Model as Model
 from mujoco.mjx.third_party.mujoco_warp._src.types import Data as Data
 # isort: on
@@ -49,7 +49,6 @@ from mujoco.mjx.third_party.mujoco_warp._src.passive import passive as passive
 from mujoco.mjx.third_party.mujoco_warp._src.ray import ray as ray
 from mujoco.mjx.third_party.mujoco_warp._src.render_context import RenderContext as RenderContext
 from mujoco.mjx.third_party.mujoco_warp._src.render_context import create_render_context as create_render_context
-from mujoco.mjx.third_party.mujoco_warp._src.render_context import create_render_context_in_registry as create_render_context_in_registry
 from mujoco.mjx.third_party.mujoco_warp._src.sensor import energy_pos as energy_pos
 from mujoco.mjx.third_party.mujoco_warp._src.sensor import energy_vel as energy_vel
 from mujoco.mjx.third_party.mujoco_warp._src.sensor import sensor_acc as sensor_acc

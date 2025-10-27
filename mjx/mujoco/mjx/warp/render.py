@@ -21,7 +21,10 @@ from mujoco.mjx.warp import ffi
 import mujoco.mjx.third_party.mujoco_warp as mjwarp
 from mujoco.mjx.third_party.mujoco_warp._src import types as mjwp_types
 import warp as wp
-
+import flax
+import threading
+import mujoco
+import functools
 
 _m = mjwarp.Model(
     **{f.name: None for f in dataclasses.fields(mjwarp.Model) if f.init}
@@ -71,6 +74,8 @@ def _render_shim(
     light_xpos: wp.array2d(dtype=wp.vec3),
     # Registry
     rc_id: int,
+    rgb: wp.array3d(dtype=wp.uint32),
+    depth: wp.array3d(dtype=wp.float32),
 ):
   _m.stat = _s
   _m.opt = _o
@@ -98,16 +103,30 @@ def _render_shim(
   _d.geom_xpos = geom_xpos
   _d.light_xdir = light_xdir
   _d.light_xpos = light_xpos
-  mjwarp.render(_m, _d, rc_id)
+  render_context = _RENDER_CONTEXT_BUFFERS[rc_id]
+  mjwarp.render(_m, _d, render_context)
+  # TODO: avoid copy?
+  wp.copy(rgb, render_context.pixels)
+  wp.copy(depth, render_context.depth)
 
 
-def _render_jax_impl(m: types.Model, d: types.Data, rc_id: int):
+def _render_jax_impl(m: types.Model, d: types.Data):
+  render_ctx = _RENDER_CONTEXT_BUFFERS[d._render_context.key]
+  ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
+  ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
+
+  output_dims = {
+     'rgb': (ncam_rgb, render_ctx.height, render_ctx.width),
+     'depth': (render_ctx.ncam, render_ctx.height, render_ctx.width)
+  }
+
   jf = ffi.jax_callable_variadic_tuple(
       _render_shim,
-      num_outputs=0,
+      num_outputs=2,
+      output_dims=output_dims,
       vmap_method=None,
   )
-  jf(
+  out = jf(
       m.geom_dataid,
       m.geom_matid,
       m.geom_rgba,
@@ -130,19 +149,73 @@ def _render_jax_impl(m: types.Model, d: types.Data, rc_id: int):
       d.geom_xpos,
       d._impl.light_xdir,
       d._impl.light_xpos,
-      int(rc_id),
+      d._render_context.key,
   )
-  return d
+  return out
 
 
 @jax.custom_batching.custom_vmap
-@ffi.marshal_jax_warp_callable
-def render(m: types.Model, d: types.Data, rc_id: int):
-  return _render_jax_impl(m, d, rc_id)
+@functools.partial(ffi.marshal_jax_warp_callable, output_only=True)
+def render(m: types.Model, d: types.Data):
+  return _render_jax_impl(m, d)
 
 
 @render.def_vmap
-@ffi.marshal_custom_vmap
-def render_vmap(unused_axis_size, is_batched, m, d, rc_id):
-  d = render(m, d, rc_id)
-  return d, is_batched[1]
+@functools.partial(ffi.marshal_custom_vmap, output_only=True)
+def render_vmap(unused_axis_size, is_batched, m, d):
+  out = render(m, d)
+  return out, (True, True)
+
+
+
+_RENDER_CONTEXT_BUFFERS = {}
+_RENDER_CONTEXT_LOCK = threading.Lock()
+
+
+@flax.struct.dataclass(frozen=True)
+class RenderContextRegistry:
+  key: int
+
+  def __del__(self):
+    with _RENDER_CONTEXT_LOCK:
+      del _RENDER_CONTEXT_BUFFERS[self.key]
+
+
+def create_render_context_in_registry(
+  mjm: mujoco.MjModel,
+  nworld: int,
+  width: int,
+  height: int,
+  use_textures: bool,
+  use_shadows: bool,
+  fov_rad: float,
+  render_rgb: bool,
+  render_depth: bool,
+  enabled_geom_groups = [0, 1, 2],
+):
+  from mujoco.mjx.third_party.mujoco_warp._src import render_context
+  from mujoco.mjx.third_party import mujoco_warp as mjw
+
+  # TODO: think of a better way besides this hack?
+  # what happens if the geom_size changes later?
+  m = mjw.put_model(mjm)
+  d = mjw.make_data(mjm)
+
+  rc = render_context.RenderContext(
+    mjm,
+    m,
+    d,
+    nworld,
+    width,
+    height,
+    use_textures,
+    use_shadows,
+    fov_rad,
+    render_rgb,
+    render_depth,
+    enabled_geom_groups,
+  )
+  with threading.Lock():
+    key = len(_RENDER_CONTEXT_BUFFERS) + 1
+    _RENDER_CONTEXT_BUFFERS[key] = rc
+  return RenderContextRegistry(key)
