@@ -15,7 +15,7 @@
 """Base types used in MJX."""
 
 import enum
-from typing import Tuple, Union
+from typing import Any, Tuple, Union
 import warnings
 
 import jax
@@ -1182,6 +1182,7 @@ class Data(PyTreeNode):
   qfrc_constraint: jax.Array
   qfrc_inverse: jax.Array
   _impl: Union[DataC, DataJAX, mjxw_types.DataWarp]
+  _render_context: Any = None
 
   @property
   def impl(self) -> Impl:
