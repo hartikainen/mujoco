@@ -85,7 +85,7 @@ class RenderTest(parameterized.TestCase):
     dx = dx.replace(qpos=d.qpos)
 
     # Attach registry id to the MJX model
-    rx = mjx.create_render_context(
+    render_context = mjx.create_render_context(
       m,
       mx,
       dx,
@@ -102,8 +102,9 @@ class RenderTest(parameterized.TestCase):
 
     # Forward kinematics and render via JAX → outputs written into rc buffers
     dx = jax.jit(forward.forward)(mx, dx)
-    _ = jax.jit(render.render)(mx, dx, rx)
-    save_image(rx.pixels.numpy()[0], camera_id, width, height)
+    out = jax.jit(render.render, static_argnums=(2,))(mx, dx, render_context)
+
+    save_image(out[0], camera_id, width, height)
 
 
 if __name__ == '__main__':
