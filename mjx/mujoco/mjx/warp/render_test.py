@@ -62,8 +62,14 @@ class RenderTest(parameterized.TestCase):
     super().tearDown()
     if hasattr(self, 'tempdir'):
       self.tempdir.cleanup()
-
-  def test_render(self):
+  
+  @parameterized.product(
+      xml=(
+          'humanoid/humanoid.xml',
+      ),
+      batch_size=(1,),
+  )
+  def test_render(self, xml: str, batch_size: int):
     """Tests render."""
     if not _FORCE_TEST:
       if not mjxw.WARP_INSTALLED:
@@ -71,24 +77,25 @@ class RenderTest(parameterized.TestCase):
       if not io.has_cuda_gpu_device():
         self.skipTest('No CUDA GPU device available.')
 
-    m = tu.load_test_file('humanoid/humanoid.xml')
+    m = tu.load_test_file(xml)
     d = mujoco.MjData(m)
     mujoco.mj_forward(m, d)
 
+    mx = mjx.put_model(m, impl='warp')
+
+    worldids = jp.arange(batch_size)
+    dx_batch = jax.vmap(functools.partial(tu.make_data, m))(worldids)
+    dx_batch = jax.jit(jax.vmap(forward.forward, in_axes=(None, 0)))(
+        mx, dx_batch
+    )
+
     camera_id = 1
     width, height = 512, 512
-
-    # MJX model/data configured for Warp
-    mx = mjx.put_model(m, impl='warp')
-    dx = mjx.make_data(m, impl='warp')
-    dx = dx.replace(qpos=d.qpos)
-
-    # Attach registry id to the MJX model
     render_context = mjx.create_render_context(
       m,
       mx,
-      dx,
-      nworld=1,
+      dx_batch,
+      nworld=batch_size,
       width=width,
       height=height,
       use_textures=True,
@@ -99,15 +106,13 @@ class RenderTest(parameterized.TestCase):
       enabled_geom_groups=[0, 1, 2],
     )
 
-    # Forward kinematics and render via JAX → outputs written into rc buffers
-    # dx = jax.jit(forward.forward)(mx, dx)
-    # out = jax.jit(render.render, static_argnums=(2,))(mx, dx, render_context)
+    out_batch = jax.jit(jax.vmap(render.render, in_axes=(None, 0, None)), static_argnums=(2,))(
+        mx, dx_batch, render_context
+    )
 
-    # avoid jitting
-    dx = forward.forward(mx, dx)
-    out = render.render(mx, dx, render_context)
+    for i in range(batch_size):
+      save_image(out_batch[i].pixels.numpy()[0], camera_id, width, height, f'{xml}_{i}.png')
 
-    save_image(out[0], camera_id, width, height)
   
   def test_warp_render(self):
     """Tests warp render."""
