@@ -16,9 +16,9 @@ from mujoco.mjx.third_party.mujoco_warp._src.types import Data
 from mujoco.mjx.third_party.mujoco_warp._src.types import Model
 from mujoco.mjx.third_party.mujoco_warp._src.types import GeomType
 from mujoco.mjx.third_party.mujoco_warp._src.warp_util import event_scope
+from mujoco.mjx.third_party.mujoco_warp._src.render_context import RenderContext
 
-if TYPE_CHECKING:
-  from mujoco.mjx.third_party.mujoco_warp._src.render_context import RenderContext
+wp.set_module_options({"enable_backward": False})
 
 MAX_NUM_VIEWS_PER_THREAD = 8
 
@@ -56,9 +56,9 @@ def tile_coords(tid: int, W: int, H: int):
 
 
 @event_scope
-def render(m: Model, d: Data, rc: "RenderContext"):
+def render(m: Model, d: Data, rc: RenderContext):
   bvh.refit_warp_bvh(m, d, rc)
-  render_raytrace_megakernel(m, d, rc)
+  render_megakernel(m, d, rc)
 
 
 @wp.func
@@ -489,7 +489,7 @@ def compute_lighting(
 
 
 @event_scope
-def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
+def render_megakernel(m: Model, d: Data, rc: RenderContext):
   total_views = rc.nworld * m.ncam
   total_pixels = rc.width * rc.height
   num_view_groups = (total_views + MAX_NUM_VIEWS_PER_THREAD - 1) // MAX_NUM_VIEWS_PER_THREAD
@@ -502,22 +502,15 @@ def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
   if rc.render_depth:
     rc.depth.fill_(wp.float32(0.0))
 
-  static_nlight = wp.static(m.nlight)
-
   @wp.kernel
-  def _raytrace_megakernel(
+  def _render_megakernel(
     # Model and Options
     nworld: int,
     ncam: int,
-    nlight: int,
-    ngeom: int,
     bvh_ngeom: int,
     img_width: int,
     img_height: int,
-    use_textures: bool,
     use_shadows: bool,
-    render_rgb: bool,
-    render_depth: bool,
 
     # Camera
     fov_rad: float,
@@ -624,6 +617,12 @@ def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
       # Early Out
       if geom_id == -1:
         continue
+      
+      if wp.static(rc.render_depth):
+        out_depth[world_idx, cam_idx, mapped_idx] = dist
+      
+      if not wp.static(rc.render_rgb):
+        continue
 
       # Shade the pixel
       hit_point = ray_origin_world + ray_dir_world * dist
@@ -636,7 +635,7 @@ def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
       base_color = wp.vec3(color[0], color[1], color[2])
       hit_color = base_color
 
-      if use_textures:
+      if wp.static(rc.use_textures):
         mat_id = geom_matid[world_idx, geom_id]
         tex_id = mat_texid[world_idx, mat_id, 1]
 
@@ -669,11 +668,23 @@ def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
           base_color[2] * tex_color[2],
         )
 
-      ambient = 0.15
-      result = base_color * ambient
+      up = wp.vec3(0.0, 0.0, 1.0)
+      len_n = wp.length(normal)
+      n = normal if len_n > 0.0 else up
+      n = wp.normalize(n)
+      hemispheric = 0.5 * (wp.dot(n, up) + 1.0)
+      sky = wp.vec3(0.4, 0.4, 0.45)
+      ground = wp.vec3(0.1, 0.1, 0.12)
+      ambient_color = sky * hemispheric + ground * (1.0 - hemispheric)
+      ambient_intensity = 0.5
+      result = wp.vec3(
+        base_color[0] * (ambient_color[0] * ambient_intensity),
+        base_color[1] * (ambient_color[1] * ambient_intensity),
+        base_color[2] * (ambient_color[2] * ambient_intensity),
+      )
 
       # Apply lighting and shadows
-      for l in range(wp.static(static_nlight)):
+      for l in range(wp.static(m.nlight)):
         light_contribution = compute_lighting(
           use_shadows,
           bvh_id,
@@ -700,32 +711,25 @@ def render_raytrace_megakernel(m: Model, d: Data, rc: "RenderContext"):
       hit_color = wp.min(result, wp.vec3(1.0, 1.0, 1.0))
       hit_color = wp.max(hit_color, wp.vec3(0.0, 0.0, 0.0))
 
-      if render_rgb:
+      if wp.static(rc.render_rgb):
         out_pixels[world_idx, cam_idx, mapped_idx] = pack_rgba_to_uint32(
           hit_color[0] * 255.0,
           hit_color[1] * 255.0,
           hit_color[2] * 255.0,
           1.0,
         )
-      if render_depth:
-        out_depth[world_idx, cam_idx, mapped_idx] = dist
 
   wp.launch(
-    kernel=_raytrace_megakernel,
+    kernel=_render_megakernel,
     dim=(num_view_groups * total_pixels),
     inputs=[
       # Model and Options
       rc.nworld,
       m.ncam,
-      m.nlight,
-      m.ngeom,
       rc.bvh_ngeom,
       rc.width,
       rc.height,
-      rc.use_textures,
       rc.use_shadows,
-      rc.render_rgb,
-      rc.render_depth,
 
       # Camera
       rc.fov_rad,
