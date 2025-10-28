@@ -47,7 +47,6 @@ def save_image(pixels, cam_id, width, height, out_fpath='test.png'):
   pixels = np.dstack([r, g, b])
   media.write_image(out_fpath, pixels)
 
-
 class RenderTest(parameterized.TestCase):
 
   def setUp(self):
@@ -101,10 +100,47 @@ class RenderTest(parameterized.TestCase):
     )
 
     # Forward kinematics and render via JAX → outputs written into rc buffers
-    dx = jax.jit(forward.forward)(mx, dx)
-    out = jax.jit(render.render, static_argnums=(2,))(mx, dx, render_context)
+    # dx = jax.jit(forward.forward)(mx, dx)
+    # out = jax.jit(render.render, static_argnums=(2,))(mx, dx, render_context)
+
+    # avoid jitting
+    dx = forward.forward(mx, dx)
+    out = render.render(mx, dx, render_context)
 
     save_image(out[0], camera_id, width, height)
+  
+  def test_warp_render(self):
+    """Tests warp render."""
+    m = tu.load_test_file('humanoid/humanoid.xml')
+    camera_id = 1
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+
+    mw = mjw.put_model(m)
+    dw = mjw.put_data(m, d, nworld=1)
+    dw.qpos = wp.array([d.qpos], dtype=wp.float32)
+    mjw.forward(mw, dw)
+
+    rc = mjw.create_render_context(
+      m,
+      mw,
+      dw,
+      nworld=1,
+      width=512,
+      height=512,
+      use_textures=True,
+      use_shadows=True,
+      fov_rad=wp.radians(60.0),
+      render_rgb=True,
+      render_depth=True,
+      enabled_geom_groups=[0, 1, 2],
+    )
+
+    mjw.render(mw, dw, rc)
+
+    save_image(rc.pixels.numpy()[0], camera_id, 512, 512, 'test_warp_render.png')
+        
+        
 
 
 if __name__ == '__main__':
