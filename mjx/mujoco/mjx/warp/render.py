@@ -115,9 +115,10 @@ def _render_jax_impl(m: types.Model, d: types.Data):
   ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
   ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
 
+  nworld = d.qpos.shape[0]
   output_dims = {
-     'rgb': (ncam_rgb, render_ctx.height, render_ctx.width),
-     'depth': (render_ctx.ncam, render_ctx.height, render_ctx.width)
+     'rgb': (nworld, ncam_rgb, render_ctx.height * render_ctx.width),
+     'depth': (nworld, render_ctx.ncam, render_ctx.height * render_ctx.width)
   }
 
   jf = ffi.jax_callable_variadic_tuple(
