@@ -4,12 +4,11 @@ import warp as wp
 import mujoco
 import threading
 
-from mujoco.mjx.third_party import mujoco_warp as mjw
 from mujoco.mjx.third_party.mujoco_warp._src.types import Model
 from mujoco.mjx.third_party.mujoco_warp._src.types import Data
 from mujoco.mjx.third_party.mujoco_warp._src.types import GeomType
 from mujoco.mjx.third_party.mujoco_warp._src import bvh
-
+from mujoco.mjx.third_party.mujoco_warp._src import render
 
 _RENDER_CONTEXT_BUFFERS = {}
 
@@ -81,9 +80,7 @@ def create_render_context_in_registry(
 
 def render_registry(m: Model, d: Data, rc_id: int):
   rc = _RENDER_CONTEXT_BUFFERS[rc_id]
-  # Lazy import to avoid circular dependency at module load time
-  from mujoco.mjx.third_party.mujoco_warp._src import render as _render
-  _render.render(m, d, rc)
+  render.render(m, d, rc)
 
 
 @wp.kernel
@@ -220,7 +217,7 @@ class RenderContext:
       mesh = wp.Mesh(
         points=wp.array(points, dtype=wp.vec3),
         indices=wp.array(indices, dtype=wp.int32),
-        bvh_constructor="sah"
+        bvh_constructor="sah",
       )
       self.mesh_registry[mesh.id] = mesh
       mesh_bvh_ids[i] = mesh.id

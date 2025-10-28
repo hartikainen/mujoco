@@ -273,8 +273,8 @@ def _ray_capsule(pos: wp.vec3, mat: wp.mat33, size: wp.vec3, pnt: wp.vec3, vec: 
   # solve a * x^2 + 2 * b * x + c = 0
   sol, xx = _ray_quad(a, b, c)
 
-  # make sure round solution is between flat sides
-  if sol >= 0.0 and wp.abs(lpnt[2] + sol * vec[2]) <= size[1]:
+  # make sure round solution is between flat sides (must use local z component)
+  if sol >= 0.0 and wp.abs(lpnt[2] + sol * lvec[2]) <= size[1]:
     if x < 0.0 or sol < x:
       x = sol
 
@@ -285,7 +285,7 @@ def _ray_capsule(pos: wp.vec3, mat: wp.mat33, size: wp.vec3, pnt: wp.vec3, vec: 
   c = wp.dot(ldif, ldif) - sq_size0
   _, xx = _ray_quad(a, b, c)
 
-  # accept only top half of sphere
+  # accept only top half of sphere (use local z component)
   for i in range(2):
     if xx[i] >= 0.0 and lpnt[2] + xx[i] * lvec[2] >= size[1]:
       if x < 0.0 or xx[i] < x:
@@ -297,7 +297,7 @@ def _ray_capsule(pos: wp.vec3, mat: wp.mat33, size: wp.vec3, pnt: wp.vec3, vec: 
   c = wp.dot(ldif, ldif) - sq_size0
   _, xx = _ray_quad(a, b, c)
 
-  # accept only bottom half of sphere
+  # accept only bottom half of sphere (use local z component)
   for i in range(2):
     if xx[i] >= 0.0 and lpnt[2] + xx[i] * lvec[2] <= -size[1]:
       if x < 0.0 or xx[i] < x:
@@ -318,24 +318,12 @@ def ray_capsule_with_normal(
   x = _ray_capsule(pos, mat, size, pnt, vec)
   if x == wp.inf:
     return False, wp.inf, wp.vec3(0.0, 0.0, 0.0)
-  # Recompute local hit point to determine which part (side or caps) we hit
+  # Compute continuous normal: vector from closest point on axis segment to the hit point
   lpnt, lvec = _ray_map(pos, mat, pnt, vec)
   hit_local = lpnt + x * lvec
-  # Determine normal in local space
-  eps = 1.0e-6
-  normal_local = wp.vec3(0.0, 0.0, 0.0)
-  if wp.abs(hit_local[2]) < size[1] - eps:
-    # Cylinder side: project onto XY
-    normal_local = wp.normalize(wp.vec3(hit_local[0], hit_local[1], 0.0))
-  elif hit_local[2] >= size[1]:
-    # Top cap
-    cap_center = wp.vec3(0.0, 0.0, size[1])
-    normal_local = wp.normalize(hit_local - cap_center)
-  else:
-    # Bottom cap
-    cap_center = wp.vec3(0.0, 0.0, -size[1])
-    normal_local = wp.normalize(hit_local - cap_center)
-  # Rotate back to world space
+  z_clamped = wp.min(size[1], wp.max(-size[1], hit_local[2]))
+  axis_point = wp.vec3(0.0, 0.0, z_clamped)
+  normal_local = wp.normalize(hit_local - axis_point)
   normal_world = mat @ normal_local
   normal_world = wp.normalize(normal_world)
   return True, x, normal_world
@@ -467,11 +455,22 @@ def ray_box_with_normal(
   x, all = _ray_box(pos, mat, size, pnt, vec)
   if x == wp.inf:
     return False, wp.inf, wp.vec3(0.0, 0.0, 0.0)
-  normal = wp.vec3(0.0, 0.0, 0.0)
+
+  # Select the face by matching the closest intersection time among the 6 faces
+  normal_local = wp.vec3(0.0, 0.0, 0.0)
+  eps = float(1.0e-6)
+  found = bool(False)
   for i in range(3):
-    if all[2 * i] != -1.0:
-      normal[i] = -wp.sign(all[2 * i])
-  normal_world = mat @ normal
+    for k in range(2):  # k=0 => -side, k=1 => +side
+      t = all[2 * i + k]
+      if t >= 0.0 and wp.abs(t - x) < eps:
+        normal_local[i] = -1.0 if k == 0 else 1.0
+        found = True
+        break
+    if found:
+      break
+
+  normal_world = mat @ normal_local
   normal_world = wp.normalize(normal_world)
   return True, x, normal_world
 

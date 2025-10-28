@@ -177,8 +177,15 @@ class RenderContextRegistry:
   key: int
 
   def __del__(self):
-    with _RENDER_CONTEXT_LOCK:
-      del _RENDER_CONTEXT_BUFFERS[self.key]
+    lock = globals().get('_RENDER_CONTEXT_LOCK')
+    buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
+    if lock is None or buffers is None:
+      return
+    try:
+      with lock:
+        buffers.pop(self.key, None)
+    except Exception:
+      pass
 
 
 def create_render_context_in_registry(
@@ -215,7 +222,7 @@ def create_render_context_in_registry(
     render_depth,
     enabled_geom_groups,
   )
-  with threading.Lock():
+  with _RENDER_CONTEXT_LOCK:
     key = len(_RENDER_CONTEXT_BUFFERS) + 1
     _RENDER_CONTEXT_BUFFERS[key] = rc
   return RenderContextRegistry(key)
