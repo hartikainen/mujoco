@@ -111,7 +111,7 @@ class RenderTest(parameterized.TestCase):
     )
 
     for i in range(batch_size):
-      save_image(out_batch[i].pixels.numpy()[0], camera_id, width, height, f'{xml}_{i}.png')
+      save_image(out_batch[i][0], camera_id, width, height, f'{xml}_{i}.png')
 
   
   def test_warp_render(self):
