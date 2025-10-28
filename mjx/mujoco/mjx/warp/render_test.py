@@ -38,14 +38,43 @@ from mujoco.mjx.third_party import mujoco_warp as mjw
 _FORCE_TEST = os.environ.get('MJX_WARP_FORCE_TEST', '0') == '1'
 
 
-def save_image(pixels, cam_id, width, height, out_fpath='test.png'):
-  pixels = pixels[cam_id]
-  pixels = pixels.reshape((width, height))
-  r = (pixels & 0xFF).astype(np.uint8)
-  g = ((pixels >> 8) & 0xFF).astype(np.uint8)
-  b = ((pixels >> 16) & 0xFF).astype(np.uint8)
-  pixels = np.dstack([r, g, b])
-  media.write_image(out_fpath, pixels)
+def save_image(pixels, nworld, cam_id, width, height, out_fpath='test.png'):
+
+  # Ensure numpy array on host
+  arr = np.asarray(pixels)
+
+  # Unpack packed uint32 RGB into uint8 HxW x 3
+  def unpack_to_rgb(img_flat):
+    img = img_flat.reshape((height, width))
+    r = (img & 0xFF).astype(np.uint8)
+    g = ((img >> 8) & 0xFF).astype(np.uint8)
+    b = ((img >> 16) & 0xFF).astype(np.uint8)
+    return np.dstack([r, g, b])
+
+  if nworld == 1:
+    # Expect arr shape: (ncam, H*W) or (1, ncam, H*W)
+    if arr.ndim == 3:
+      img_flat = arr[0, cam_id]
+    else:
+      img_flat = arr[cam_id]
+    rgb = unpack_to_rgb(img_flat)
+    media.write_image(out_fpath, rgb)
+    return
+
+  cols = int(np.ceil(np.sqrt(nworld)))
+  rows = int(np.ceil(nworld / cols))
+
+  canvas = np.zeros((rows * height, cols * width, 3), dtype=np.uint8)
+  for w in range(nworld):
+    img_flat = arr[w, cam_id]
+    rgb = unpack_to_rgb(img_flat)
+    r = w // cols
+    c = w % cols
+    y0, y1 = r * height, (r + 1) * height
+    x0, x1 = c * width, (c + 1) * width
+    canvas[y0:y1, x0:x1, :] = rgb
+
+  media.write_image(out_fpath, canvas)
 
 class RenderTest(parameterized.TestCase):
 
@@ -66,8 +95,9 @@ class RenderTest(parameterized.TestCase):
   @parameterized.product(
       xml=(
           'humanoid/humanoid.xml',
+          # 'pendula.xml',
       ),
-      batch_size=(1,),
+      batch_size=(1, 16),
   )
   def test_render(self, xml: str, batch_size: int):
     """Tests render."""
@@ -89,6 +119,8 @@ class RenderTest(parameterized.TestCase):
         mx, dx_batch
     )
 
+    print(dx_batch.qpos)
+
     camera_id = 1
     width, height = 512, 512
     render_context = mjx.create_render_context(
@@ -109,9 +141,10 @@ class RenderTest(parameterized.TestCase):
     out_batch = jax.jit(jax.vmap(render.render, in_axes=(None, 0, None)), static_argnums=(2,))(
         mx, dx_batch, render_context
     )
-
-    for i in range(batch_size):
-      save_image(out_batch[i][0], camera_id, width, height, f'{xml}_{i}.png')
+    # Save a single image: either the sole world, or a tiled grid for multi-world
+    rgb_all_worlds = out_batch[0]  # shape: (nworld, ncam, H*W)
+    out_path = 'tiled.png' if batch_size > 1 else '0.png'
+    save_image(rgb_all_worlds, batch_size, camera_id, width, height, out_path)
 
   
   def test_warp_render(self):
@@ -143,9 +176,7 @@ class RenderTest(parameterized.TestCase):
 
     mjw.render(mw, dw, rc)
 
-    save_image(rc.pixels.numpy()[0], camera_id, 512, 512, 'test_warp_render.png')
-        
-        
+    save_image(rc.pixels.numpy(), 1, camera_id, 512, 512, 'test_warp_render.png')
 
 
 if __name__ == '__main__':
