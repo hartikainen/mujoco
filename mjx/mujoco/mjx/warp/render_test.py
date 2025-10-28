@@ -95,7 +95,6 @@ class RenderTest(parameterized.TestCase):
   @parameterized.product(
       xml=(
           'humanoid/humanoid.xml',
-          # 'pendula.xml',
       ),
       batch_size=(1, 16),
   )
@@ -115,9 +114,17 @@ class RenderTest(parameterized.TestCase):
 
     worldids = jp.arange(batch_size)
     dx_batch = jax.vmap(functools.partial(tu.make_data, m))(worldids)
+
+    key = jax.random.PRNGKey(0)
+    keys = jax.random.split(key, batch_size)
+    qpos0 = jp.array(m.qpos0)
+    rand_qpos = jax.vmap(lambda k: qpos0 + jax.random.uniform(k, (m.nq,), minval=-0.2, maxval=0.05))(keys)
+    dx_batch = jax.vmap(lambda dx, q: dx.replace(qpos=q))(dx_batch, rand_qpos)
+
     dx_batch = jax.jit(jax.vmap(forward.forward, in_axes=(None, 0)))(
         mx, dx_batch
     )
+    
 
     print(dx_batch.qpos)
 
