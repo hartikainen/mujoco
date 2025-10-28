@@ -164,7 +164,7 @@ def render(m: types.Model, d: types.Data):
 @functools.partial(ffi.marshal_custom_vmap, output_only=True)
 def render_vmap(unused_axis_size, is_batched, m, d):
   out = render(m, d)
-  return out, (True, True)
+  return out, [True, True]
 
 
 
