@@ -58,7 +58,8 @@ def _render_shim(
     light_castshadow: wp.array2d(dtype=bool),
     light_type: wp.array2d(dtype=int),
     mat_rgba: wp.array2d(dtype=wp.vec4),
-    mat_texid: wp.array3d(dtype=int),
+    mat_texid: wp.array2d(dtype=int),
+    # mat_texid: wp.array3d(dtype=int),
     mat_texrepeat: wp.array2d(dtype=wp.vec2),
     mesh_face: wp.array(dtype=wp.vec3i),
     mesh_faceadr: wp.array(dtype=int),
@@ -104,14 +105,20 @@ def _render_shim(
   _d.light_xdir = light_xdir
   _d.light_xpos = light_xpos
   render_context = _RENDER_CONTEXT_BUFFERS[rc_id]
+  if isinstance(render_context, dict):
+    render_context = render_context[wp.get_device().alias]
   mjwarp.render(_m, _d, render_context)
   # TODO: avoid copy?
+  # wp.copy(rgb, render_context.pixels)
   wp.copy(rgb, render_context.pixels)
   wp.copy(depth, render_context.depth)
 
 
 def _render_jax_impl(m: types.Model, d: types.Data):
   render_ctx = _RENDER_CONTEXT_BUFFERS[d._render_context.key]
+  if isinstance(render_ctx, dict):
+    render_ctx = next(iter(render_ctx.values()))
+
   ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
   ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
 

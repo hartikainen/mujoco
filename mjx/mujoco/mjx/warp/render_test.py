@@ -76,6 +76,49 @@ def save_image(pixels, nworld, cam_id, width, height, out_fpath='test.png'):
 
   media.write_image(out_fpath, canvas)
 
+
+def save_video(pixels_seq, nworld, cam_id, width, height, out_fpath='test.mp4', fps=60):
+  """Saves a video from a sequence of pixel arrays."""
+  video_frames = []
+
+  # Unpack packed uint32 RGB into uint8 HxW x 3
+  def unpack_to_rgb(img_flat):
+    img = img_flat.reshape((height, width))
+    r = (img & 0xFF).astype(np.uint8)
+    g = ((img >> 8) & 0xFF).astype(np.uint8)
+    b = ((img >> 16) & 0xFF).astype(np.uint8)
+    return np.dstack([r, g, b])
+
+  for pixels in pixels_seq:
+    # Ensure numpy array on host
+    arr = np.asarray(pixels)
+
+    if nworld == 1:
+      # Expect arr shape: (ncam, H*W) or (1, ncam, H*W)
+      if arr.ndim == 3:
+        img_flat = arr[0, cam_id]
+      else:
+        img_flat = arr[cam_id]
+      rgb = unpack_to_rgb(img_flat)
+      video_frames.append(rgb)
+    else:
+      cols = int(np.ceil(np.sqrt(nworld)))
+      rows = int(np.ceil(nworld / cols))
+
+      canvas = np.zeros((rows * height, cols * width, 3), dtype=np.uint8)
+      for w in range(nworld):
+        img_flat = arr[w, cam_id]
+        rgb = unpack_to_rgb(img_flat)
+        r = w // cols
+        c = w % cols
+        y0, y1 = r * height, (r + 1) * height
+        x0, x1 = c * width, (c + 1) * width
+        canvas[y0:y1, x0:x1, :] = rgb
+      video_frames.append(canvas)
+
+  media.write_video(out_fpath, video_frames, fps=fps)
+
+
 class RenderTest(parameterized.TestCase):
 
   def setUp(self):
@@ -91,7 +134,7 @@ class RenderTest(parameterized.TestCase):
     super().tearDown()
     if hasattr(self, 'tempdir'):
       self.tempdir.cleanup()
-  
+
   @parameterized.product(
       xml=(
           'humanoid/humanoid.xml',
@@ -124,7 +167,7 @@ class RenderTest(parameterized.TestCase):
     dx_batch = jax.jit(jax.vmap(forward.forward, in_axes=(None, 0)))(
         mx, dx_batch
     )
-    
+
 
     print(dx_batch.qpos)
 
@@ -137,7 +180,7 @@ class RenderTest(parameterized.TestCase):
       nworld=batch_size,
       width=width,
       height=height,
-      use_textures=True,
+      use_textures=False,
       use_shadows=True,
       fov_rad=wp.radians(60.0),
       render_rgb=True,
@@ -153,7 +196,98 @@ class RenderTest(parameterized.TestCase):
     out_path = 'tiled.png' if batch_size > 1 else '0.png'
     save_image(rgb_all_worlds, batch_size, camera_id, width, height, out_path)
 
-  
+
+  @parameterized.product(
+      xml=(
+          'humanoid/humanoid.xml',
+      ),
+      batch_size=(8,),
+  )
+  def test_render_pmap(self, xml: str, batch_size: int):
+    """Tests render."""
+    from mujoco.mjx.warp import render as render_lib
+
+    m = tu.load_test_file(xml)
+    d = mujoco.MjData(m)
+    mujoco.mj_forward(m, d)
+
+    mx = mjx.put_model(m, impl='warp')
+
+    camera_id = 1
+    width, height = 1024, 1024
+
+    # Create a RenderContext for each device and register them under a single key.
+    devices = jax.local_devices()
+    multi_device_ctx = {}
+
+    dx_dummy = tu.make_data(m, 0)
+
+    for device in devices:
+        wp_device_alias = f"cuda:{device.id}"
+        with wp.ScopedDevice(wp_device_alias):
+            # Create a temporary context to get the Warp objects
+            # We use create_render_context but we don't need the registry wrapper it returns
+            # We need to access the internal buffers.
+            # But create_render_context returns RenderContextRegistry.
+            # We need to look it up in _RENDER_CONTEXT_BUFFERS.
+
+            # Note: we pass a dummy dx (dx_dummy) because create_render_context only uses it for checking impl.
+            rc_reg = mjx.create_render_context(
+              m, mx, dx_dummy, nworld=batch_size,
+              width=width, height=height,
+              use_textures=False, use_shadows=True,
+              fov_rad=wp.radians(60.0),
+              render_rgb=True, render_depth=True,
+              enabled_geom_groups=[0, 1, 2],
+            )
+
+            # Extract the actual RenderContext object
+            rc_obj = render_lib._RENDER_CONTEXT_BUFFERS[rc_reg.key]
+            multi_device_ctx[wp_device_alias] = rc_obj
+            # rc_reg goes out of scope, key is popped. rc_obj is kept in our dict.
+
+    # Register the multi-device context dict
+    with render_lib._RENDER_CONTEXT_LOCK:
+        key = len(render_lib._RENDER_CONTEXT_BUFFERS) + 1
+        render_lib._RENDER_CONTEXT_BUFFERS[key] = multi_device_ctx
+
+    render_context_registry = render_lib.RenderContextRegistry(key)
+
+    def render_step(key: jax.Array):
+        worldids = jp.arange(batch_size)
+        dx_batch = jax.vmap(functools.partial(tu.make_data, m))(worldids)
+
+        # We use the pre-created multi-device context
+        render_context = render_context_registry
+
+        print(f'render_context used: {render_context=}')
+
+        keys = jax.random.split(key, batch_size)
+        qpos0 = jp.array(m.qpos0)
+        rand_qpos = jax.vmap(lambda k: qpos0 + jax.random.uniform(k, (m.nq,), minval=-0.2, maxval=0.05))(keys)
+        dx_batch = jax.vmap(lambda dx, q: dx.replace(qpos=q))(dx_batch, rand_qpos)
+
+        dx_batch = jax.jit(jax.vmap(forward.forward, in_axes=(None, 0)))(
+            mx, dx_batch
+        )
+
+        out_batch = jax.jit(jax.vmap(render.render, in_axes=(None, 0, None)), static_argnums=(2,))(
+            mx, dx_batch, render_context
+        )
+        return out_batch
+
+    local_device_count = jax.local_device_count()
+    keys = jax.random.split(jax.random.PRNGKey(0), local_device_count)
+    out_batch = jax.pmap(render_step)(keys)
+
+    # Save a single image: either the sole world, or a tiled grid for multi-world
+    rgb_all_worlds = out_batch[0].reshape(np.prod(out_batch[0].shape[0:2]), *out_batch[0].shape[2:])  # shape: (nworld, ncam, H*W)
+    # print(f'DEBUG: out_batch.shape={out_batch.shape}')
+    # print(f'DEBUG: rgb_all_worlds.shape={rgb_all_worlds.shape}')
+    out_path = 'tiled.mp4'
+    save_video([rgb_all_worlds], rgb_all_worlds.shape[0], camera_id, width, height, out_path)
+
+
   def test_warp_render(self):
     """Tests warp render."""
     m = tu.load_test_file('humanoid/humanoid.xml')

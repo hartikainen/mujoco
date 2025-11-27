@@ -668,6 +668,7 @@ def _make_data_jax(
       eq_active=m.eq_active0,
       _impl=impl,
       **_make_data_public_fields(m),
+      _render_context=None,
   )
 
   if m.nmocap:
@@ -861,6 +862,7 @@ def _make_data_warp(
       eq_active=m.eq_active0.astype(bool),
       **fields,
       _impl=mjxw.types.DataWarp(**impl_fields),
+      _render_context=None,
   )
 
   data = jax.device_put(data, device=device)

@@ -187,10 +187,10 @@ class RenderContext:
     render_depth,
     enabled_geom_groups = [0, 1, 2],
   ):
-    
+
     nmesh = mjm.nmesh
     geom_enabled_idx = [i for i in range(mjm.ngeom) if mjm.geom_group[i] in enabled_geom_groups]
-    
+
     used_mesh_ids = set(
       int(mjm.geom_dataid[g])
       for g in geom_enabled_idx
@@ -226,7 +226,7 @@ class RenderContext:
       pmax = points.max(axis=0)
       half = 0.5 * (pmax - pmin)
       mesh_bounds_size[i] = half
-    
+
     tex_data_packed, tex_adr_packed = _create_packed_texture_data(mjm)
 
     bvh_ngeom = len(geom_enabled_idx)
@@ -256,7 +256,7 @@ class RenderContext:
     self.group_roots = wp.zeros((nworld,), dtype=wp.int32)
     self.pixels = wp.zeros((nworld, mjm.ncam, width * height), dtype=wp.uint32)
     self.depth = wp.zeros((nworld, mjm.ncam, width * height), dtype=wp.float32)
-    
+
     self.bvh = None
     self.bvh_id = None
     bvh.build_warp_bvh(m, d, self)

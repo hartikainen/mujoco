@@ -1182,7 +1182,7 @@ class Data(PyTreeNode):
   qfrc_constraint: jax.Array
   qfrc_inverse: jax.Array
   _impl: Union[DataC, DataJAX, mjxw_types.DataWarp]
-  _render_context: Any = None
+  _render_context: Any
 
   @property
   def impl(self) -> Impl:
