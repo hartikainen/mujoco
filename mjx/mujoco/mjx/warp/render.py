@@ -26,6 +26,8 @@ import threading
 import mujoco
 import functools
 
+breakpoint(); pass
+
 _m = mjwarp.Model(
     **{f.name: None for f in dataclasses.fields(mjwarp.Model) if f.init}
 )
@@ -105,8 +107,6 @@ def _render_shim(
   _d.light_xdir = light_xdir
   _d.light_xpos = light_xpos
   render_context = _RENDER_CONTEXT_BUFFERS[rc_id]
-  if isinstance(render_context, dict):
-    render_context = render_context[wp.get_device().alias]
   mjwarp.render(_m, _d, render_context)
   # TODO: avoid copy?
   # wp.copy(rgb, render_context.pixels)
@@ -116,8 +116,6 @@ def _render_shim(
 
 def _render_jax_impl(m: types.Model, d: types.Data):
   render_ctx = _RENDER_CONTEXT_BUFFERS[d._render_context.key]
-  if isinstance(render_ctx, dict):
-    render_ctx = next(iter(render_ctx.values()))
 
   ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
   ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
@@ -184,19 +182,52 @@ _RENDER_CONTEXT_LOCK = threading.Lock()
 class RenderContextRegistry:
   key: int
 
-  def __del__(self):
-    lock = globals().get('_RENDER_CONTEXT_LOCK')
-    buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
-    if lock is None or buffers is None:
-      return
-    try:
-      with lock:
-        buffers.pop(self.key, None)
-    except Exception:
-      pass
+  # def __del__(self):
+  #   print(f"\n\nDeleting render context from registry... {self.key=}\n\n")
+  #   lock = globals().get('_RENDER_CONTEXT_LOCK')
+  #   buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
+  #   if lock is None or buffers is None:
+  #     return
+  #   try:
+  #     with lock:
+  #       buffers.pop(self.key, None)
+  #   except Exception:
+  #     pass
 
 
 def create_render_context_in_registry(
+  mjm: mujoco.MjModel,
+  nworld: int,
+  width: int,
+  height: int,
+  use_textures: bool,
+  use_shadows: bool,
+  fov_rad: float,
+  render_rgb: bool,
+  render_depth: bool,
+  enabled_geom_groups = [0, 1, 2],
+):
+  rc = create_render_context(
+    mjm=mjm,
+    nworld=nworld,
+    width=width,
+    height=height,
+    use_textures=use_textures,
+    use_shadows=use_shadows,
+    fov_rad=fov_rad,
+    render_rgb=render_rgb,
+    render_depth=render_depth,
+    enabled_geom_groups=enabled_geom_groups,
+  )
+
+  with _RENDER_CONTEXT_LOCK:
+    key = len(_RENDER_CONTEXT_BUFFERS) + 1
+    _RENDER_CONTEXT_BUFFERS[key] = rc
+
+  print(f"\n\nCreating render context in registry... {key=}\n\n")
+  return RenderContextRegistry(key)
+
+def create_render_context(
   mjm: mujoco.MjModel,
   nworld: int,
   width: int,
@@ -230,7 +261,5 @@ def create_render_context_in_registry(
     render_depth,
     enabled_geom_groups,
   )
-  with _RENDER_CONTEXT_LOCK:
-    key = len(_RENDER_CONTEXT_BUFFERS) + 1
-    _RENDER_CONTEXT_BUFFERS[key] = rc
-  return RenderContextRegistry(key)
+
+  return rc

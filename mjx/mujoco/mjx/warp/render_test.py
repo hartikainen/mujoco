@@ -222,45 +222,29 @@ class RenderTest(parameterized.TestCase):
 
     dx_dummy = tu.make_data(m, 0)
 
-    for device in devices:
-        wp_device_alias = f"cuda:{device.id}"
-        with wp.ScopedDevice(wp_device_alias):
-            # Create a temporary context to get the Warp objects
-            # We use create_render_context but we don't need the registry wrapper it returns
-            # We need to access the internal buffers.
-            # But create_render_context returns RenderContextRegistry.
-            # We need to look it up in _RENDER_CONTEXT_BUFFERS.
-
-            # Note: we pass a dummy dx (dx_dummy) because create_render_context only uses it for checking impl.
-            rc_reg = mjx.create_render_context(
-              m, mx, dx_dummy, nworld=batch_size,
-              width=width, height=height,
-              use_textures=False, use_shadows=True,
-              fov_rad=wp.radians(60.0),
-              render_rgb=True, render_depth=True,
-              enabled_geom_groups=[0, 1, 2],
-            )
-
-            # Extract the actual RenderContext object
-            rc_obj = render_lib._RENDER_CONTEXT_BUFFERS[rc_reg.key]
-            multi_device_ctx[wp_device_alias] = rc_obj
-            # rc_reg goes out of scope, key is popped. rc_obj is kept in our dict.
-
-    # Register the multi-device context dict
-    with render_lib._RENDER_CONTEXT_LOCK:
-        key = len(render_lib._RENDER_CONTEXT_BUFFERS) + 1
-        render_lib._RENDER_CONTEXT_BUFFERS[key] = multi_device_ctx
-
-    render_context_registry = render_lib.RenderContextRegistry(key)
-
     def render_step(key: jax.Array):
         worldids = jp.arange(batch_size)
         dx_batch = jax.vmap(functools.partial(tu.make_data, m))(worldids)
 
         # We use the pre-created multi-device context
-        render_context = render_context_registry
+        render_context = mjx.create_render_context(
+          m,
+          mx,
+          dx_batch,
+          nworld=batch_size,
+          width=width,
+          height=height,
+          use_textures=False,
+          use_shadows=True,
+          fov_rad=wp.radians(60.0),
+          render_rgb=True,
+          render_depth=True,
+          enabled_geom_groups=[0, 1, 2],
+        )
 
-        print(f'render_context used: {render_context=}')
+        from mujoco.mjx.warp import render as mjxw_render
+        rc = mjxw_render._RENDER_CONTEXT_BUFFERS[render_context.key]
+        print(f'\n\nrender_context used: {render_context=}, {rc.enabled_geom_ids.device=}\n\n')
 
         keys = jax.random.split(key, batch_size)
         qpos0 = jp.array(m.qpos0)

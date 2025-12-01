@@ -857,6 +857,9 @@ def _make_data_warp(
       field = field.reshape(field.shape[1:])
     impl_fields[k] = field
 
+  # breakpoint(); pass
+  # jax.tree.map(lambda x: x.device(), impl_fields)
+
   data = types.Data(
       qpos=m.qpos0.astype(np.float32),
       eq_active=m.eq_active0.astype(bool),
@@ -866,6 +869,11 @@ def _make_data_warp(
   )
 
   data = jax.device_put(data, device=device)
+
+  try:
+    print(f'\n\nCreated data... {data.qpos.device=}, {device=}\n\n')
+  except Exception:
+    print(f'\n\nCreated data... {device=}\n\n')
 
   with wp.ScopedDevice('cuda:0'):  # pylint: disable=undefined-variable
     # Warm-up the warp kernel cache.
