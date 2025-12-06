@@ -502,13 +502,15 @@ class EqType(enum.IntEnum):
     JOINT: couple the values of two scalar joints with cubic
     WELD: fix relative position and orientation of two bodies
     TENDON: couple the lengths of two tendons with cubic
+    FLEX: couple the edge lengths of a flex
   """
 
   CONNECT = mujoco.mjtEq.mjEQ_CONNECT
   WELD = mujoco.mjtEq.mjEQ_WELD
   JOINT = mujoco.mjtEq.mjEQ_JOINT
   TENDON = mujoco.mjtEq.mjEQ_TENDON
-  # unsupported: FLEX, DISTANCE
+  FLEX = mujoco.mjtEq.mjEQ_FLEX
+  # unsupported: DISTANCE
 
 
 class WrapType(enum.IntEnum):
@@ -890,6 +892,7 @@ class Model:
     flex_elem: element vertex ids (dim+1 per elem)           (nflexelemdata,)
     flex_elemedge: element edge ids                          (nflexelemedge,)
     flexedge_length0: edge lengths in qpos0                  (nflexedge,)
+    flexedge_invweight0: inv. inertia for the edge           (nflexedge,)
     flex_stiffness: finite element stiffness matrix          (nflexelem, 21)
     flex_bending: bending stiffness                          (nflexedge, 17)
     flex_damping: Rayleigh's damping coefficient             (nflex,)
@@ -917,7 +920,7 @@ class Model:
     hfield_ncol: number of columns in grid                   (nhfield,)
     hfield_adr: start address in hfield_data                 (nhfield,)
     hfield_data: elevation data                              (nhfielddata,)
-    mat_texid: texture id for rendering                      (nmat, mjNTEXROLE)
+    mat_texid: texture id for rendering                      (*, nmat, mjNTEXROLE)
     mat_texrepeat: texture repeat for rendering              (*, nmat, 2)
     mat_rgba: rgba                                           (*, nmat, 4)
     pair_dim: contact dimensionality                         (npair,)
@@ -1031,6 +1034,7 @@ class Model:
     eq_wld_adr: eq_* addresses of type `WELD`
     eq_jnt_adr: eq_* addresses of type `JOINT`
     eq_ten_adr: eq_* addresses of type `TENDON`
+    eq_flex_adr: eq * addresses of type `FLEX
     tendon_jnt_adr: joint tendon address
     tendon_site_pair_adr: site pair tendon address
     tendon_geom_adr: geom tendon address
@@ -1232,6 +1236,7 @@ class Model:
   flex_elem: array("nflexelemdata", int)
   flex_elemedge: array("nflexelemedge", int)
   flexedge_length0: array("nflexedge", float)
+  flexedge_invweight0: array("nflexedge", float)
   flex_stiffness: array("nflexelem", 21, float)
   flex_bending: array("nflexedge", 17, float)
   flex_damping: array("nflex", float)
@@ -1259,7 +1264,7 @@ class Model:
   hfield_ncol: array("nhfield", int)
   hfield_adr: array("nhfield", int)
   hfield_data: array("nhfielddata", float)
-  mat_texid: array("nmat", 10, int)
+  mat_texid: array("*", "nmat", 10, int)
   mat_texrepeat: array("*", "nmat", wp.vec2)
   mat_rgba: array("*", "nmat", wp.vec4)
   pair_dim: array("npair", int)
@@ -1367,6 +1372,7 @@ class Model:
   eq_wld_adr: wp.array(dtype=int)
   eq_jnt_adr: wp.array(dtype=int)
   eq_ten_adr: wp.array(dtype=int)
+  eq_flex_adr: wp.array(dtype=int)
   tendon_jnt_adr: wp.array(dtype=int)
   tendon_site_pair_adr: wp.array(dtype=int)
   tendon_geom_adr: wp.array(dtype=int)
@@ -1578,7 +1584,7 @@ class Data:
     cdof: com-based motion axis of each dof (rot:lin)           (nworld, nv, 6)
     cinert: com-based body inertia and mass                     (nworld, nbody, 10)
     flexvert_xpos: cartesian flex vertex positions              (nworld, nflexvert, 3)
-    flexedge_length: flex edge lengths                          (nworld, nflexedge, 1)
+    flexedge_length: flex edge lengths                          (nworld, nflexedge)
     ten_wrapadr: start address of tendon's path                 (nworld, ntendon)
     ten_wrapnum: number of wrap points in path                  (nworld, ntendon)
     ten_J: tendon Jacobian                                      (nworld, ntendon, nv)
@@ -1593,7 +1599,7 @@ class Data:
     qLD: L'*D*L factorization of M                              (nworld, nv, nv) if dense
                                                                 (nworld, 1, nC) if sparse
     qLDiagInv: 1/diag(D)                                        (nworld, nv)
-    flexedge_velocity: flex edge velocities                     (nworld, nflexedge,)
+    flexedge_velocity: flex edge velocities                     (nworld, nflexedge)
     ten_velocity: tendon velocities                             (nworld, ntendon)
     actuator_velocity: actuator velocities                      (nworld, nu)
     cvel: com-based velocity (rot:lin)                          (nworld, nbody, 6)
@@ -1629,6 +1635,7 @@ class Data:
     ne_weld: number of equality weld constraints                (nworld,)
     ne_jnt: number of equality joint constraints                (nworld,)
     ne_ten: number of equality tendon constraints               (nworld,)
+    ne_flex: number of flex edge equality constraints           (nworld,)
     nsolving: number of unconverged worlds                      (1,)
     subtree_bodyvel: subtree body velocity (ang, vel)           (nworld, nbody, 6)
     collision_pair: collision pairs from broadphase             (naconmax, 2)
@@ -1676,6 +1683,7 @@ class Data:
   cdof: array("nworld", "nv", wp.spatial_vector)
   cinert: array("nworld", "nbody", vec10)
   flexvert_xpos: array("nworld", "nflexvert", wp.vec3)
+  flexedge_J: array("nworld", "nflexedge", "nv", float)
   flexedge_length: array("nworld", "nflexedge", float)
   ten_wrapadr: array("nworld", "ntendon", int)
   ten_wrapnum: array("nworld", "ntendon", int)
@@ -1723,6 +1731,7 @@ class Data:
   ne_weld: array("nworld", int)
   ne_jnt: array("nworld", int)
   ne_ten: array("nworld", int)
+  ne_flex: array("nworld", int)
   nsolving: array(1, int)
   subtree_bodyvel: array("nworld", "nbody", wp.spatial_vector)
 
