@@ -587,7 +587,7 @@ def render_megakernel(m: Model, d: Data, rc: RenderContext):
     geom_rgba: wp.array2d(dtype=wp.vec4),
     mesh_faceadr: wp.array(dtype=int),
     mesh_face: wp.array(dtype=wp.vec3i),
-    mat_texid: wp.array3d(dtype=int),
+    mat_texid: wp.array2d(dtype=int),
     mat_texrepeat: wp.array2d(dtype=wp.vec2),
     mat_rgba: wp.array2d(dtype=wp.vec4),
     light_active: wp.array2d(dtype=bool),
@@ -717,7 +717,7 @@ def render_megakernel(m: Model, d: Data, rc: RenderContext):
       if geom_id != -2:
         mat_id = geom_matid[world_idx, geom_id]
         if mat_id >= 0:
-          tex_id = mat_texid[world_idx, mat_id, 1]
+          tex_id = mat_texid[world_idx, mat_id]
           if tex_id >= 0:
             tex_color = sample_texture(
               geom_type,

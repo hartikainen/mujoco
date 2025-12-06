@@ -58,7 +58,7 @@ def _render_shim(
     light_castshadow: wp.array2d(dtype=bool),
     light_type: wp.array2d(dtype=int),
     mat_rgba: wp.array2d(dtype=wp.vec4),
-    mat_texid: wp.array3d(dtype=int),
+    mat_texid: wp.array2d(dtype=int),
     mat_texrepeat: wp.array2d(dtype=wp.vec2),
     mesh_face: wp.array(dtype=wp.vec3i),
     mesh_faceadr: wp.array(dtype=int),
