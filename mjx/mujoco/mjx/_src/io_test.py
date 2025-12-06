@@ -816,6 +816,52 @@ class DataIOTest(parameterized.TestCase):
       self.assertEqual(dx._impl.contact__dist.shape, (dx._impl.naconmax,))
       self.assertEqual(dx[0]._impl.contact__dist.shape, (dx._impl.naconmax,))
 
+  def test_pmap_warp(self):
+    """Tests that DataWarp works under jax.pmap."""
+    if not mjxw.WARP_INSTALLED:
+      self.skipTest('Warp is not installed.')
+    if not mjx_io.has_cuda_gpu_device():
+      self.skipTest('No CUDA GPU device.')
+
+    from mujoco.mjx._src import io
+    n_devices = jax.local_device_count()
+    batch_size = 3
+    nstep = 10
+    unroll_steps = 2
+
+    m = mujoco.MjModel.from_xml_string(_MULTIPLE_CONVEX_OBJECTS)
+    mx = mjx.put_model(m, impl='warp')
+
+    def init(key):
+      key = jax.random.split(key, batch_size)
+
+      @jax.vmap
+      def random_init(key):
+        d = mjx.make_data(m, impl='warp')
+        qvel = 0.01 * jax.random.normal(key, shape=(m.nv,))
+        d = d.replace(qvel=qvel)
+        return d
+
+      return random_init(key)
+
+    @jax.pmap
+    def unroll(key):
+      d = init(key)
+
+      @jax.vmap
+      def step(d, _):
+        d = mjx.step(mx, d)
+        return d, None
+
+      d, _ = jax.lax.scan(step, d, None, length=nstep, unroll=unroll_steps)
+
+      return d
+
+    keys = jax.random.split(jax.random.key(0), n_devices)
+    result = unroll(keys)
+
+    self.assertEqual(result.qpos.shape, (n_devices, batch_size, m.nq))
+
 
 # Test cases for `_resolve_impl_and_device` where the device is
 # specified by the user and the device is available.
