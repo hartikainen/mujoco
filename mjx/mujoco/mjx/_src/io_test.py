@@ -132,7 +132,7 @@ class ModelIOTest(parameterized.TestCase):
     super().setUp()
     if mjxw.WARP_INSTALLED:
       self.tempdir = tempfile.TemporaryDirectory()
-      wp.config.kernel_cache_dir = self.tempdir.name
+    #   wp.config.kernel_cache_dir = self.tempdir.name
 
   @parameterized.product(
       xml=(_MULTIPLE_CONVEX_OBJECTS, _MULTIPLE_CONSTRAINTS),
@@ -366,7 +366,7 @@ class DataIOTest(parameterized.TestCase):
     super().setUp()
     if mjxw.WARP_INSTALLED:
       self.tempdir = tempfile.TemporaryDirectory()
-      wp.config.kernel_cache_dir = self.tempdir.name
+    #   wp.config.kernel_cache_dir = self.tempdir.name
 
   @parameterized.parameters('jax', 'c')
   def test_make_data(self, impl: str):
