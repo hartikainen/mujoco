@@ -189,7 +189,7 @@ class RenderContextRegistry:
       pass
 
 
-def create_render_context_in_registry(
+def create_render_context(
   mjm: mujoco.MjModel,
   nworld: int,
   width: int,
@@ -222,6 +222,33 @@ def create_render_context_in_registry(
     render_rgb,
     render_depth,
     enabled_geom_groups,
+  )
+  return rc
+
+
+def create_render_context_in_registry(
+  mjm: mujoco.MjModel,
+  nworld: int,
+  width: int,
+  height: int,
+  use_textures: bool,
+  use_shadows: bool,
+  fov_rad: float,
+  render_rgb: bool,
+  render_depth: bool,
+  enabled_geom_groups = [0, 1, 2],
+):
+  rc = create_render_context(
+    mjm=mjm,
+    nworld=nworld,
+    width=width,
+    height=height,
+    use_textures=use_textures,
+    use_shadows=use_shadows,
+    fov_rad=fov_rad,
+    render_rgb=render_rgb,
+    render_depth=render_depth,
+    enabled_geom_groups=enabled_geom_groups,
   )
   with _RENDER_CONTEXT_LOCK:
     key = len(_RENDER_CONTEXT_BUFFERS) + 1
