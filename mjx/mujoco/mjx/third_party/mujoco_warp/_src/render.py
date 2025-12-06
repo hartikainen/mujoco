@@ -535,7 +535,7 @@ def render_megakernel(m: Model, d: Data, rc: RenderContext):
     mesh_texcoord_offsets: wp.array(dtype=int),
 
     # Textures
-    mat_texid: wp.array3d(dtype=int),
+    mat_texid: wp.array2d(dtype=int),
     mat_texrepeat: wp.array2d(dtype=wp.vec2),
     mat_rgba: wp.array2d(dtype=wp.vec4),
     tex_adr: wp.array(dtype=int),
