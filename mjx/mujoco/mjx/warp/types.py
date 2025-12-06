@@ -116,6 +116,7 @@ class ModelWarp(PyTreeNode):
   eq_jnt_adr: np.ndarray
   eq_ten_adr: np.ndarray
   eq_wld_adr: np.ndarray
+  eq_flex_adr: np.ndarray
   flex_bending: np.ndarray
   flex_damping: np.ndarray
   flex_dim: np.ndarray
@@ -593,6 +594,7 @@ _NDIM = {
         'eq_connect_adr': 1,
         'eq_data': 3,
         'eq_jnt_adr': 1,
+        'eq_flex_adr': 1,
         'eq_obj1id': 1,
         'eq_obj2id': 1,
         'eq_objtype': 1,
@@ -1131,6 +1133,7 @@ _BATCH_DIM = {
         'eq_connect_adr': False,
         'eq_data': True,
         'eq_jnt_adr': False,
+        'eq_flex_adr': False,
         'eq_obj1id': False,
         'eq_obj2id': False,
         'eq_objtype': False,

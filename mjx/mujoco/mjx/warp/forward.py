@@ -128,6 +128,7 @@ def _forward_shim(
     eq_solref: wp.array2d(dtype=wp.vec2),
     eq_ten_adr: wp.array(dtype=int),
     eq_wld_adr: wp.array(dtype=int),
+    eq_flex_adr: wp.array(dtype=int),
     flex_bending: wp.array2d(dtype=float),
     flex_damping: wp.array(dtype=float),
     flex_dim: wp.array(dtype=int),
@@ -579,6 +580,7 @@ def _forward_shim(
   _m.eq_solref = eq_solref
   _m.eq_ten_adr = eq_ten_adr
   _m.eq_wld_adr = eq_wld_adr
+  _m.eq_flex_adr = eq_flex_adr
   _m.flex_bending = flex_bending
   _m.flex_damping = flex_damping
   _m.flex_dim = flex_dim
@@ -1303,6 +1305,7 @@ def _forward_jax_impl(m: types.Model, d: types.Data):
       m.eq_solref,
       m._impl.eq_ten_adr,
       m._impl.eq_wld_adr,
+      m._impl.eq_flex_adr,
       m._impl.flex_bending,
       m._impl.flex_damping,
       m._impl.flex_dim,
@@ -1920,6 +1923,7 @@ def _step_shim(
     eq_solref: wp.array2d(dtype=wp.vec2),
     eq_ten_adr: wp.array(dtype=int),
     eq_wld_adr: wp.array(dtype=int),
+    eq_flex_adr: wp.array(dtype=int),
     flex_bending: wp.array2d(dtype=float),
     flex_damping: wp.array(dtype=float),
     flex_dim: wp.array(dtype=int),
@@ -2373,6 +2377,7 @@ def _step_shim(
   _m.eq_solref = eq_solref
   _m.eq_ten_adr = eq_ten_adr
   _m.eq_wld_adr = eq_wld_adr
+  _m.eq_flex_adr = eq_flex_adr
   _m.flex_bending = flex_bending
   _m.flex_damping = flex_damping
   _m.flex_dim = flex_dim
@@ -3099,6 +3104,7 @@ def _step_jax_impl(m: types.Model, d: types.Data):
       m.eq_solref,
       m._impl.eq_ten_adr,
       m._impl.eq_wld_adr,
+      m._impl.eq_flex_adr,
       m._impl.flex_bending,
       m._impl.flex_damping,
       m._impl.flex_dim,
