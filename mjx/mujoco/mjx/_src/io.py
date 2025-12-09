@@ -668,6 +668,11 @@ def _make_data_jax(
       eq_active=m.eq_active0,
       _impl=impl,
       **_make_data_public_fields(m),
+      # TODO(hartikainen): Clean the render context fields below. They don't have
+      # default values because our Brax environments break when we have `kwargs` in
+      # `types.Data`.
+      _render_context=None,
+      _device_specific_rc_id=False,
   )
 
   if m.nmocap:
@@ -861,6 +866,11 @@ def _make_data_warp(
       eq_active=m.eq_active0.astype(bool),
       **fields,
       _impl=mjxw.types.DataWarp(**impl_fields),
+      # TODO(hartikainen): Clean the render context fields below. They don't have
+      # default values because our Brax environments break when we have `kwargs` in
+      # `types.Data`.
+      _render_context=None,
+      _device_specific_rc_id=False,
   )
 
   data = jax.device_put(data, device=device)
