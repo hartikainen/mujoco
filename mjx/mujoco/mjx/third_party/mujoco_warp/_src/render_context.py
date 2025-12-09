@@ -57,6 +57,7 @@ def create_render_context_in_registry(
   render_rgb: bool,
   render_depth: bool,
   enabled_geom_groups = [0, 1, 2],
+  key: str | int | tuple[str | int, ...] = None,
 ):
   rc = RenderContext(
     mjm,
@@ -73,7 +74,8 @@ def create_render_context_in_registry(
     enabled_geom_groups,
   )
   with threading.Lock():
-    key = len(_RENDER_CONTEXT_BUFFERS) + 1
+    if key is None:
+      key = len(_RENDER_CONTEXT_BUFFERS) + 1
     _RENDER_CONTEXT_BUFFERS[key] = rc
   return RenderContextRegistry(key)
 
@@ -134,7 +136,7 @@ def _create_packed_texture_data(mjm: mujoco.MjModel) -> tuple[wp.array, wp.array
 
 @dataclasses.dataclass(frozen=True)
 class RenderContextRegistry:
-  key: int
+  key: str | int | tuple[str | int, ...]
 
   def __del__(self):
     with threading.Lock():
