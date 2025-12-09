@@ -49,6 +49,7 @@ def create_render_context(
     render_rgb: bool,
     render_depth: bool,
     enabled_geom_groups = [0, 1, 2],
+    key: str | int | tuple[str | int, ...] | None = None,
 ):
   """Render."""
   if m.impl == Impl.WARP and d.impl == Impl.WARP and mjxw.WARP_INSTALLED:
@@ -64,6 +65,7 @@ def create_render_context(
       render_rgb,
       render_depth,
       enabled_geom_groups,
+      key,
     )
 
   raise NotImplementedError(f'render only implemented for Warp backend.')

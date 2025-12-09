@@ -1204,7 +1204,8 @@ class Data(PyTreeNode):
   qfrc_constraint: jax.Array
   qfrc_inverse: jax.Array
   _impl: Union[DataC, DataCPP, DataJAX, mjxw_types.DataWarp]
-  _render_context: Any = None
+  _render_context: Any
+  _device_specific_rc_id: Any
 
   @property
   def impl(self) -> Impl:

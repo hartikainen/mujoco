@@ -14,6 +14,7 @@ from jax import numpy as jp
 import mediapy as media
 import mujoco
 from mujoco import mjx
+from mujoco.mjx.warp import render as mjxw_render
 from mujoco.mjx._src import io as mjx_io
 from mujoco.mjx._src import render
 import mujoco.mjx.warp as mjxw
@@ -21,6 +22,7 @@ import numpy as np
 from PIL import Image
 from PIL import ImageDraw
 from PIL import ImageFont
+import warp as wp
 
 
 _MULTIPLE_CONVEX_OBJECTS = (epath.Path(__file__).parent / 'render_model.xml').read_text()
@@ -229,19 +231,42 @@ class RenderTest(parameterized.TestCase):
       )(dx.qpos, key)
       dx = dx.replace(qpos=qpos)
 
-      rc = render.create_render_context(
-        m,
-        mx,
-        dx,
-        cam_res=camera_resolutions[camera_mask],
-        render_rgb=True,
-        render_depth=True,
-        use_textures=False,
-        use_shadows=False,
-        enabled_geom_groups=[0, 1, 2],
-        cam_active=camera_mask,
-      )
-      dx = dx.replace(_render_context=rc)
+      with mjxw_render._RENDER_CONTEXT_LOCK:
+        rc_id = len(mjxw_render._RENDER_CONTEXT_BUFFERS)
+
+      # TODO(hartikainen): We need to create render context for each device here because
+      # the render context is put on a device at the creation time. We don't know what
+      # device we're on when the `jax.pmap` function is executed, so we need to create
+      # it on all devices here, and then select the correct one at runtime **inside** the
+      # jax-warp ffi call.
+      for device in map(wp.device_from_jax, jax.devices()):
+        with wp.ScopedDevice(device):
+          unused_rc = render.create_render_context(
+              m,
+              mx,
+              dx,
+              cam_res=camera_resolutions[camera_mask],
+              render_rgb=True,
+              render_depth=True,
+              use_textures=False,
+              use_shadows=False,
+              enabled_geom_groups=[0, 1, 2],
+              cam_active=camera_mask,
+              key=(rc_id, str(device)),
+          )
+
+      # NOTE(hartikainen): We don't use device-specific render context because we
+      # don't know what device the render will be called from. Thus, we store just
+      # the integer key and create the render context on-demand inside jax-warp ffi
+      # call.
+
+      rc_id_without_device = mjxw_render.RenderContextRegistry(key=rc_id)
+      # NOTE(hartikainen): What `_device_specific_rc_id` does is that it tells the
+      # render function to look up the correct render context based on the
+      # runtime device the jax function is being executed on. This is needed because
+      # we don't know here what device we'll be rendering on.
+      dx = dx.replace(_render_context=rc_id_without_device, _device_specific_rc_id=True)
+
       rgb, depth = render.render(mx, dx, dx._render_context)
       rgb = jax.vmap(
         lambda x: extract_and_resize(x, camera_resolutions, camera_mask, (width, height), True)
