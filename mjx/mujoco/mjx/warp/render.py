@@ -74,6 +74,7 @@ def _render_shim(
     light_xpos: wp.array2d(dtype=wp.vec3),
     # Registry
     rc_id: int,
+    device_specific_rc_id: bool,
     rgb: wp.array3d(dtype=wp.uint32),
     depth: wp.array3d(dtype=wp.float32),
 ):
@@ -103,15 +104,34 @@ def _render_shim(
   _d.geom_xpos = geom_xpos
   _d.light_xdir = light_xdir
   _d.light_xpos = light_xpos
-  render_context = _RENDER_CONTEXT_BUFFERS[rc_id]
+  if device_specific_rc_id:
+    # TODO(hartikainen): We need to do this check under/within the ffi call. If we do it
+    # outside, `wp.get_device()` always results in `cuda:0` (because that's where the
+    # JAX tracing happens) and hence the device gets hard-coded to the ffi call. By
+    # calling `wp.get_device()` inside the ffi call, we get the right device.
+    #
+    # TODO(hartikainen): This is a hacky workaround. It's really error prone, opaque,
+    # and what's worse, the user needs to explicitly create/put render contexts for
+    # every device.
+    key = (rc_id, str(wp.get_device()))
+  else:
+    key = rc_id
+  render_context = _RENDER_CONTEXT_BUFFERS[key]
   mjwarp.render(_m, _d, render_context)
   # TODO: avoid copy?
-  wp.copy(rgb, render_context.pixels)
+  # wp.copy(rgb, render_context.pixels)
   wp.copy(depth, render_context.depth)
 
 
 def _render_jax_impl(m: types.Model, d: types.Data):
-  render_ctx = _RENDER_CONTEXT_BUFFERS[d._render_context.key]
+  rc_id = d._render_context.key
+  if d._device_specific_rc_id:
+    key = (rc_id, str(wp.get_device()))
+  else:
+    key = rc_id
+
+  render_ctx = _RENDER_CONTEXT_BUFFERS[key]
+
   ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
   ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
 
@@ -151,6 +171,7 @@ def _render_jax_impl(m: types.Model, d: types.Data):
       d._impl.light_xdir,
       d._impl.light_xpos,
       d._render_context.key,
+      d._device_specific_rc_id,
   )
   return out
 
@@ -175,18 +196,21 @@ _RENDER_CONTEXT_LOCK = threading.Lock()
 
 @flax.struct.dataclass(frozen=True)
 class RenderContextRegistry:
-  key: int
+  key: str | int | tuple[str | int, ...]
 
-  def __del__(self):
-    lock = globals().get('_RENDER_CONTEXT_LOCK')
-    buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
-    if lock is None or buffers is None:
-      return
-    try:
-      with lock:
-        buffers.pop(self.key, None)
-    except Exception:
-      pass
+  # NOTE(hartikainen): I've commented this out because we discard the default render
+  # context keys and hence this destructor deletes the render contexts too early.
+
+  # def __del__(self):
+  #   lock = globals().get('_RENDER_CONTEXT_LOCK')
+  #   buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
+  #   if lock is None or buffers is None:
+  #     return
+  #   try:
+  #     with lock:
+  #       buffers.pop(self.key, None)
+  #   except Exception:
+  #     pass
 
 
 def create_render_context(
@@ -237,6 +261,7 @@ def create_render_context_in_registry(
   render_rgb: bool,
   render_depth: bool,
   enabled_geom_groups = [0, 1, 2],
+  key: str | int | tuple[str | int, ...] | None = None,
 ):
   rc = create_render_context(
     mjm=mjm,
@@ -251,6 +276,10 @@ def create_render_context_in_registry(
     enabled_geom_groups=enabled_geom_groups,
   )
   with _RENDER_CONTEXT_LOCK:
-    key = len(_RENDER_CONTEXT_BUFFERS) + 1
+    if key is None:
+      key = len(_RENDER_CONTEXT_BUFFERS) + 1
+    assert key not in _RENDER_CONTEXT_BUFFERS, (
+      f'RenderContext with key {key} already exists in registry.'
+    )
     _RENDER_CONTEXT_BUFFERS[key] = rc
   return RenderContextRegistry(key)
