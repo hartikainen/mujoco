@@ -40,15 +40,14 @@ def create_render_context(
     mjm: mujoco.MjModel,
     m: Model,
     d: Data,
-    nworld: int,
-    width: int,
-    height: int,
-    use_textures: bool,
-    use_shadows: bool,
-    fov_rad: float,
+    cam_res: list[tuple[int, int]] | tuple[int, int],
     render_rgb: bool,
     render_depth: bool,
+    use_textures: bool,
+    use_shadows: bool,
     enabled_geom_groups = [0, 1, 2],
+    cam_active: list[bool] | None = None,
+    flex_render_smooth: bool = True,
     key: str | int | tuple[str | int, ...] | None = None,
 ):
   """Render."""
@@ -56,15 +55,16 @@ def create_render_context(
     from mujoco.mjx.warp import render as mjxw_render  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
     return mjxw_render.create_render_context_in_registry(
       mjm,
-      nworld,
-      width,
-      height,
-      use_textures,
-      use_shadows,
-      fov_rad,
+      m,
+      d,
+      cam_res,
       render_rgb,
       render_depth,
+      use_textures,
+      use_shadows,
       enabled_geom_groups,
+      cam_active,
+      flex_render_smooth,
       key,
     )
 

@@ -49,6 +49,7 @@ _e = mjwarp.Constraint(
 @ffi.format_args_for_warp
 def _render_shim(
     # Model
+    nworld: int,
     geom_dataid: wp.array(dtype=int),
     geom_matid: wp.array2d(dtype=int),
     geom_rgba: wp.array2d(dtype=wp.vec4),
@@ -64,6 +65,7 @@ def _render_shim(
     mesh_faceadr: wp.array(dtype=int),
     ncam: int,
     ngeom: int,
+    nflex: int,
     nlight: int,
     # Data
     cam_xmat: wp.array2d(dtype=wp.mat33),
@@ -75,8 +77,9 @@ def _render_shim(
     # Registry
     rc_id: int,
     device_specific_rc_id: bool,
-    rgb: wp.array3d(dtype=wp.uint32),
-    depth: wp.array3d(dtype=wp.float32),
+    # Out
+    rgb_out: wp.array2d(dtype=wp.uint32),
+    depth_out: wp.array2d(dtype=float),
 ):
   _m.stat = _s
   _m.opt = _o
@@ -97,6 +100,7 @@ def _render_shim(
   _m.mesh_faceadr = mesh_faceadr
   _m.ncam = ncam
   _m.ngeom = ngeom
+  _m.nflex = nflex
   _m.nlight = nlight
   _d.cam_xmat = cam_xmat
   _d.cam_xpos = cam_xpos
@@ -104,6 +108,8 @@ def _render_shim(
   _d.geom_xpos = geom_xpos
   _d.light_xdir = light_xdir
   _d.light_xpos = light_xpos
+  _d.nworld = nworld
+
   if device_specific_rc_id:
     # TODO(hartikainen): We need to do this check under/within the ffi call. If we do it
     # outside, `wp.get_device()` always results in `cuda:0` (because that's where the
@@ -119,8 +125,8 @@ def _render_shim(
   render_context = _RENDER_CONTEXT_BUFFERS[key]
   mjwarp.render(_m, _d, render_context)
   # TODO: avoid copy?
-  # wp.copy(rgb, render_context.pixels)
-  wp.copy(depth, render_context.depth)
+  wp.copy(rgb_out, render_context.rgb_data)
+  wp.copy(depth_out, render_context.depth_data)
 
 
 def _render_jax_impl(m: types.Model, d: types.Data):
@@ -132,22 +138,24 @@ def _render_jax_impl(m: types.Model, d: types.Data):
 
   render_ctx = _RENDER_CONTEXT_BUFFERS[key]
 
+  # TODO(hartikainen): Doesn't this always evaluate to `render_ctx.ncam` because
+  # `render_ctx.render_{rgb,depth}` are `wp.array`s?
   ncam_rgb = render_ctx.ncam if render_ctx.render_rgb else 0
   ncam_depth = render_ctx.ncam if render_ctx.render_depth else 0
-
-  nworld = d.qpos.shape[0]
   output_dims = {
-     'rgb': (nworld, ncam_rgb, render_ctx.height * render_ctx.width),
-     'depth': (nworld, render_ctx.ncam, render_ctx.height * render_ctx.width)
+    'rgb_out': render_ctx.rgb_data.shape,
+    'depth_out': render_ctx.depth_data.shape,
   }
-
   jf = ffi.jax_callable_variadic_tuple(
       _render_shim,
       num_outputs=2,
       output_dims=output_dims,
       vmap_method=None,
+      # TODO(hartikainen): `in_out_argnames = {"rgb_out", "depth_out"}`?
   )
+
   out = jf(
+      d.qpos.shape[0],
       m.geom_dataid,
       m.geom_matid,
       m.geom_rgba,
@@ -163,6 +171,7 @@ def _render_jax_impl(m: types.Model, d: types.Data):
       m.mesh_faceadr,
       m.ncam,
       m.ngeom,
+      m._impl.nflex,
       m.nlight,
       d.cam_xmat,
       d.cam_xpos,
@@ -215,65 +224,70 @@ class RenderContextRegistry:
 
 def create_render_context(
   mjm: mujoco.MjModel,
-  nworld: int,
-  width: int,
-  height: int,
-  use_textures: bool,
-  use_shadows: bool,
-  fov_rad: float,
+  m: types.Model,
+  d: types.Data,
+  cam_res: list[tuple[int, int]] | tuple[int, int],
   render_rgb: bool,
   render_depth: bool,
+  use_textures: bool,
+  use_shadows: bool,
   enabled_geom_groups = [0, 1, 2],
+  cam_active: list[bool] | None = None,
+  flex_render_smooth: bool = True,
 ):
   from mujoco.mjx.third_party.mujoco_warp._src import render_context
   from mujoco.mjx.third_party import mujoco_warp as mjw
 
   # TODO: think of a better way besides this hack?
   # what happens if the geom_size changes later?
-  m = mjw.put_model(mjm)
-  d = mjw.make_data(mjm)
+  mw = mjw.put_model(mjm)
+  dw = mjw.make_data(mjm)
+
+  dw.qpos = wp.array(shape=d.qpos.shape, dtype=wp.dtype_from_jax(d.qpos.dtype))
+  dw.nworld = d.qpos.shape[0] if d.qpos.ndim > 1 else 1
 
   rc = render_context.RenderContext(
     mjm,
-    m,
-    d,
-    nworld,
-    width,
-    height,
-    use_textures,
-    use_shadows,
-    fov_rad,
+    mw,
+    dw,
+    cam_res,
     render_rgb,
     render_depth,
+    use_textures,
+    use_shadows,
     enabled_geom_groups,
+    cam_active,
+    flex_render_smooth,
   )
   return rc
 
 
 def create_render_context_in_registry(
   mjm: mujoco.MjModel,
-  nworld: int,
-  width: int,
-  height: int,
-  use_textures: bool,
-  use_shadows: bool,
-  fov_rad: float,
+  m: types.Model,
+  d: types.Data,
+  cam_res: list[tuple[int, int]] | tuple[int, int],
   render_rgb: bool,
   render_depth: bool,
+  use_textures: bool,
+  use_shadows: bool,
   enabled_geom_groups = [0, 1, 2],
+  cam_active: list[bool] | None = None,
+  flex_render_smooth: bool = True,
   key: str | int | tuple[str | int, ...] | None = None,
 ):
   rc = create_render_context(
     mjm=mjm,
-    nworld=nworld,
-    width=width,
-    height=height,
-    use_textures=use_textures,
-    use_shadows=use_shadows,
-    fov_rad=fov_rad,
+    m=m,
+    d=d,
+    cam_res=cam_res,
     render_rgb=render_rgb,
     render_depth=render_depth,
+    use_textures=use_textures,
+    use_shadows=use_shadows,
     enabled_geom_groups=enabled_geom_groups,
+    cam_active=cam_active,
+    flex_render_smooth=flex_render_smooth,
   )
   with _RENDER_CONTEXT_LOCK:
     if key is None:
