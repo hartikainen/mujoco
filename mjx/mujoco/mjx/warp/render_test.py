@@ -126,7 +126,6 @@ class RenderTest(parameterized.TestCase):
         mx, dx_batch
     )
     
-
     print(dx_batch.qpos)
 
     camera_id = 1
@@ -135,22 +134,20 @@ class RenderTest(parameterized.TestCase):
       m,
       mx,
       dx_batch,
-      nworld=batch_size,
-      width=width,
-      height=height,
-      use_textures=True,
-      use_shadows=True,
-      fov_rad=wp.radians(60.0),
+      cam_res=(width, height),
       render_rgb=True,
       render_depth=True,
+      use_textures=False,
+      use_shadows=False,
       enabled_geom_groups=[0, 1, 2],
+      cam_active=[True] * m.ncam,
     )
 
     out_batch = jax.jit(jax.vmap(render.render, in_axes=(None, 0, None)), static_argnums=(2,))(
         mx, dx_batch, render_context
     )
     # Save a single image: either the sole world, or a tiled grid for multi-world
-    rgb_all_worlds = out_batch[0]  # shape: (nworld, ncam, H*W)
+    rgb_all_worlds = out_batch[0].reshape(batch_size, m.ncam, -1)  # shape: (nworld, ncam, H*W)
     out_path = 'tiled.png' if batch_size > 1 else '0.png'
     save_image(rgb_all_worlds, batch_size, camera_id, width, height, out_path)
 
