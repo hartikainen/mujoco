@@ -27,6 +27,7 @@ import warp as wp
 from mujoco.mjx.third_party.mujoco_warp._src import forward
 from mujoco.mjx.third_party.mujoco_warp._src import io
 from mujoco.mjx.third_party.mujoco_warp._src import warp_util
+from mujoco.mjx.third_party.mujoco_warp._src.render_context import RenderContext
 from mujoco.mjx.third_party.mujoco_warp._src.types import Data
 from mujoco.mjx.third_party.mujoco_warp._src.types import Model
 from mujoco.mjx.third_party.mujoco_warp._src.util_misc import halton
@@ -96,6 +97,7 @@ def benchmark(
   event_trace: bool = False,
   measure_alloc: bool = False,
   measure_solver_niter: bool = False,
+  render_context: Optional[RenderContext] = None,
 ) -> Tuple[float, float, dict, list, list, list, int]:
   """Benchmark a function of Model and Data.
 
@@ -125,8 +127,14 @@ def benchmark(
   with warp_util.EventTracer(enabled=event_trace) as tracer:
     # capture the whole function as a CUDA graph
     jit_beg = time.perf_counter()
-    with wp.ScopedCapture() as capture:
-      fn(m, d)
+
+    if render_context is not None:
+      with wp.ScopedCapture() as capture:
+        fn(m, d, render_context)
+    else:
+      with wp.ScopedCapture() as capture:
+        fn(m, d)
+
     jit_end = time.perf_counter()
     jit_duration = jit_end - jit_beg
 
@@ -174,6 +182,7 @@ class BenchmarkSuite:
   batch_size = -1
   nconmax = -1
   njmax = -1
+  nstep = 1000
   param_names = ("function",)
   params = (
     "jit_duration",
@@ -239,7 +248,7 @@ class BenchmarkSuite:
     d = io.put_data(mjm, mjd, self.batch_size, self.nconmax, self.njmax)
     free_after = wp.get_device().free_memory
 
-    jit_duration, _, trace, _, _, solver_niter, _ = benchmark(forward.step, m, d, 1000, ctrls, True, False, True)
+    jit_duration, _, trace, _, _, solver_niter, _ = benchmark(forward.step, m, d, self.nstep, ctrls, True, False, True)
     metrics = {
       "jit_duration": jit_duration,
       "solver_niter_mean": np.mean(solver_niter),
