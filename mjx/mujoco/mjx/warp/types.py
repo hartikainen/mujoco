@@ -69,6 +69,7 @@ class BlockDim:
   update_gradient_JTDAJ_dense: int
   update_gradient_JTDAJ_sparse: int
   update_gradient_cholesky: int
+  update_gradient_cholesky_blocked: int
 
   def tree_flatten(self):
     children = list((getattr(self, k) for k in self.__dataclass_fields__))
@@ -115,6 +116,7 @@ class ModelWarp(PyTreeNode):
   eq_connect_adr: np.ndarray
   eq_jnt_adr: np.ndarray
   eq_ten_adr: np.ndarray
+  eq_flex_adr: np.ndarray
   eq_wld_adr: np.ndarray
   flex_bending: np.ndarray
   flex_damping: np.ndarray
@@ -250,7 +252,6 @@ class DataWarp(PyTreeNode):
   efc__aref: jax.Array
   efc__beta: jax.Array
   efc__cholesky_L_tmp: jax.Array
-  efc__cholesky_y_tmp: jax.Array
   efc__cost: jax.Array
   efc__done: jax.Array
   efc__force: jax.Array
@@ -287,6 +288,7 @@ class DataWarp(PyTreeNode):
   ne_connect: jax.Array
   ne_jnt: jax.Array
   ne_ten: jax.Array
+  ne_flex: jax.Array
   ne_weld: jax.Array
   nefc: jax.Array
   nf: jax.Array
@@ -405,7 +407,6 @@ _NDIM = {
         'efc__aref': 2,
         'efc__beta': 1,
         'efc__cholesky_L_tmp': 3,
-        'efc__cholesky_y_tmp': 2,
         'efc__cost': 1,
         'efc__done': 1,
         'efc__force': 2,
@@ -447,6 +448,7 @@ _NDIM = {
         'ne_connect': 1,
         'ne_jnt': 1,
         'ne_ten': 1,
+        'ne_flex': 1,
         'ne_weld': 1,
         'nefc': 1,
         'nf': 1,
@@ -596,6 +598,7 @@ _NDIM = {
         'eq_solimp': 3,
         'eq_solref': 3,
         'eq_ten_adr': 1,
+        'eq_flex_adr': 1,
         'eq_type': 1,
         'eq_wld_adr': 1,
         'exclude_signature': 1,
@@ -943,7 +946,6 @@ _BATCH_DIM = {
         'efc__aref': True,
         'efc__beta': True,
         'efc__cholesky_L_tmp': True,
-        'efc__cholesky_y_tmp': True,
         'efc__cost': True,
         'efc__done': True,
         'efc__force': True,
@@ -972,6 +974,7 @@ _BATCH_DIM = {
         'flexedge_length': True,
         'flexedge_velocity': True,
         'flexvert_xpos': True,
+        'flexedge_J': True,
         'geom_xmat': True,
         'geom_xpos': True,
         'light_xdir': True,
@@ -985,6 +988,7 @@ _BATCH_DIM = {
         'ne_connect': True,
         'ne_jnt': True,
         'ne_ten': True,
+        'ne_flex': True,
         'ne_weld': True,
         'nefc': True,
         'nf': True,
@@ -1134,6 +1138,7 @@ _BATCH_DIM = {
         'eq_solimp': True,
         'eq_solref': True,
         'eq_ten_adr': False,
+        'eq_flex_adr': False,
         'eq_type': False,
         'eq_wld_adr': False,
         'exclude_signature': False,
