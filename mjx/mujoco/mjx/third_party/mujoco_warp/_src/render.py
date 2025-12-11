@@ -46,9 +46,9 @@ MAX_NUM_VIEWS_PER_THREAD = 8
 
 BACKGROUND_COLOR = (
   255 << 24 |
-  int(0.1 * 255.0) << 16 |
-  int(0.1 * 255.0) << 8 |
-  int(0.2 * 255.0)
+  int(0.0 * 255.0) << 16 |
+  int(0.0 * 255.0) << 8 |
+  int(0.0 * 255.0)
 )
 
 SPOT_INNER_COS = float(0.95)
