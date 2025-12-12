@@ -270,7 +270,16 @@ def marshal_jax_warp_callable(func, raw_output: bool = False):
     d_expanded_result = func(m_expanded, d_expanded)
 
     if raw_output:
-      return d_expanded_result
+      # TODO(hartikainen): This is not "raw_output", but rather I'm misusing the flag to
+      # marshal the rendering output. We should figure this out properly.
+
+      if d.qpos.ndim == 1:
+        return [d_expanded_result[0][0], d_expanded_result[1][0]]
+      elif d.qpos.ndim == 2:
+        return d_expanded_result
+      else:
+        raise ValueError(f"Unexpected {d.qpos.ndim}, expected 1 or 2.")
+
     d_result = jax.tree.map(_squeeze_dim, d_expanded_result, d)
     return d_result
 
