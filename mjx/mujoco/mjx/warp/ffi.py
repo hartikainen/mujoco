@@ -26,7 +26,6 @@ from mujoco.mjx.warp import types as mjx_warp_types
 import numpy as np
 import warp as wp
 from mujoco.mjx.third_party.warp._src.jax_experimental import ffi
-from mujoco.mjx.warp import render as mjxw_render
 
 
 def flatten_signature(signature: inspect.Signature, args: Tuple[Any, ...]):
@@ -404,26 +403,6 @@ def marshal_custom_vmap(vmap_func, raw_output: bool = False):
         axis_size, is_batched, m_flat, d_broadcast_flat
     )
     if raw_output:
-      if (
-          mjxw_render._RENDER_CONTEXT_BUFFERS[(is_batched[1]._render_context.key, "cuda:0")].depth_data.shape[0]
-          != d_broadcast_flat_result[1].shape[0]
-      ) or (
-          axis_size != d_broadcast_flat_result[0].shape[0]
-      ):
-        raise ValueError(
-            f"Mismatch in render output batch size: "
-            f"expected ({axis_size}, "
-            f"{mjxw_render._RENDER_CONTEXT_BUFFERS[(is_batched[1]._render_context.key, 'cuda:0')].depth_data.shape[0]}), "
-            f"got ({d_broadcast_flat_result[0].shape[0]}, "
-            f"{d_broadcast_flat_result[1].shape[0]})"
-        )
-
-      # Is this wrong?
-      # render._RENDER_CONTEXT_BUFFERS[(is_batched[1]._render_context.key, "cuda:0")].depth_data.shape[0]
-      # Should match this:
-      # d_broadcast_flat_result[1].shape[0]
-      # breakpoint(); pass
-
       return d_broadcast_flat_result, out_batched
 
     # Explicitly mark MuJoCo Warp data fields as batched after vmapping is done.
