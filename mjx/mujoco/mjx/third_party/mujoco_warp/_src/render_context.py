@@ -68,7 +68,6 @@ class RenderContext:
   cam_id_map: wp.array(dtype=int)
   use_textures: bool
   use_shadows: bool
-  geom_count: int
   bvh_ngeom: int
   enabled_geom_ids: wp.array(dtype=int)
   mesh_bvh_id: wp.array(dtype=wp.uint64)
