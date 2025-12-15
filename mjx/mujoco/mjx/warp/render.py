@@ -210,16 +210,16 @@ class RenderContextRegistry:
   # NOTE(hartikainen): I've commented this out because we discard the default render
   # context keys and hence this destructor deletes the render contexts too early.
 
-  def __del__(self):
-    lock = globals().get('_RENDER_CONTEXT_LOCK')
-    buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
-    if lock is None or buffers is None:
-      return
-    try:
-      with lock:
-        buffers.pop(self.key, None)
-    except Exception:
-      pass
+  # def __del__(self):
+  #   lock = globals().get('_RENDER_CONTEXT_LOCK')
+  #   buffers = globals().get('_RENDER_CONTEXT_BUFFERS')
+  #   if lock is None or buffers is None:
+  #     return
+  #   try:
+  #     with lock:
+  #       buffers.pop(self.key, None)
+  #   except Exception:
+  #     pass
 
 
 def create_render_context(
