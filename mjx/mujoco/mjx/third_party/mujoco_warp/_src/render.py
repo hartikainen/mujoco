@@ -693,7 +693,7 @@ def render_megakernel(m: Model, d: Data, rc: RenderContext):
       return
 
     if render_depth[cam_idx]:
-      depth_out[world_idx, depth_adr[cam_idx] + ray_idx_local] = dist
+      depth_out[world_idx, depth_adr[cam_idx] + ray_idx_local] = dist * -ray_dir_local_cam[2]
 
     if not render_rgb[cam_idx]:
       return
