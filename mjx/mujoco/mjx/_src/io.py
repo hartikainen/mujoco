@@ -459,7 +459,11 @@ def _put_model_warp(
     mw = mjwp.put_model(m)  # pylint: disable=undefined-variable
 
   fields = {f.name for f in types.Model.fields() if f.name != '_impl'}
-  fields = {f: getattr(m, f) for f in fields}
+  fields = {
+    f: getattr(m, f)
+    for f in fields
+    if f not in {"nJten"}
+  }
   # Grab MJW private Option fields, and assume that public MjOption fields are
   # directly compatible with MJXW.
   option_keys = {f.name for f in mjxw.types.OptionWarp.fields()} - {
