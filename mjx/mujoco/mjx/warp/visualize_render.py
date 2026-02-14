@@ -102,6 +102,29 @@ def _save_tiled(rgb, out_path):
   print(f'  tiled image:  {out_path}')
 
 
+def render_pipeline(m, mx, worldids, rc):
+  @jax.vmap
+  def init(worldid):
+    dx = mjx.make_data(m, impl='warp')
+    rng = jax.random.PRNGKey(worldid)
+    qpos0 = jp.array(m.qpos0)
+    qpos = qpos0
+    if _RANDOMIZE_QPOS.value:
+      # TODO(robotics-team): consider integrating velocity if there are free
+      # joints.
+      qpos = qpos0 + jax.random.uniform(
+          rng, (m.nq,), minval=-0.2, maxval=0.05
+      )
+    return dx.replace(qpos=qpos)
+
+  dx = init(worldids)
+  dx = jax.vmap(forward.forward, in_axes=(None, 0))(mx, dx)
+  dx = jax.vmap(bvh.refit_bvh, in_axes=(None, 0, None))(mx, dx, rc)
+  # dx = jax.vmap(forward.forward, in_axes=(None, 0))(mx, dx)
+  out = jax.vmap(render.render, in_axes=(None, 0, None))(mx, dx, rc)
+  return out
+
+
 def _main(_: Sequence[str]):
   os.environ['MJX_WARP_ENABLED'] = 'true'
 
@@ -126,28 +149,12 @@ def _main(_: Sequence[str]):
   mx = mjx.put_model(m, impl='warp')
 
   worldids = jp.arange(_NWORLD.value)
+  n_batches = 2
+  if _NWORLD.value % n_batches != 0:
+    raise ValueError(f'nworld ({_NWORLD.value}) must be divisible by {n_batches}')
 
-  @jax.vmap
-  def init(worldid):
-    dx = mjx.make_data(m, impl='warp')
-    rng = jax.random.PRNGKey(worldid)
-    qpos0 = jp.array(m.qpos0)
-    qpos = qpos0
-    if _RANDOMIZE_QPOS.value:
-      # TODO(robotics-team): consider integrating velocity if there are free
-      # joints.
-      qpos = qpos0 + jax.random.uniform(
-          rng, (m.nq,), minval=-0.2, maxval=0.05
-      )
-    return dx.replace(qpos=qpos)
-
-  print('initializing data...')
-  dx_batch = jax_jit(init)(worldids)
-
-  print('running forward...')
-  dx_batch = jax_jit(
-      jax.vmap(forward.forward, in_axes=(None, 0))
-  )(mx, dx_batch)
+  worldids = worldids.reshape(n_batches, -1)
+  print(f'  worldids shape: {worldids.shape}')
 
   print('creating render context...')
   rc = io.create_render_context(
@@ -162,19 +169,22 @@ def _main(_: Sequence[str]):
   )
 
   print('rendering...')
-  dx_batch = jax_jit(
+  batched_pipeline = jax_jit(
       jax.vmap(
-          bvh.refit_bvh, in_axes=(None, 0, None)
+          functools.partial(render_pipeline, m), in_axes=(None, 0, None)
       )
-  )(mx, dx_batch, rc)
+  )
+  out_batch = batched_pipeline(mx, worldids, rc)
 
-  out_batch = jax_jit(
-      jax.vmap(
-          render.render, in_axes=(None, 0, None)
-      )
-  )(mx, dx_batch, rc)
-
+  # out_batch is ((n_batches, sub_batch, ...), (n_batches, sub_batch, ...))
   rgb_packed = out_batch[0]
+  depth_packed = out_batch[1]
+
+  # Flatten the batch dimensions (first two)
+  # Expected shape: (n_batches, sub_batch, total_pixels) -> (nworld, total_pixels)
+  rgb_packed = rgb_packed.reshape((-1, rgb_packed.shape[-1]))
+  depth_packed = depth_packed.reshape((-1, depth_packed.shape[-1]))
+
   print(f'  rgb shape: {rgb_packed.shape}\n')
 
   rgb = jax.vmap(
