@@ -30,12 +30,36 @@ from mujoco.mjx._src import forward
 from mujoco.mjx._src import render
 from mujoco.mjx._src import render_util
 from mujoco.mjx._src import test_util
+from mujoco.mjx.warp import ffi
 from mujoco.mjx.warp import io
+from mujoco.mjx.warp.io import _MJX_RENDER_CONTEXT_BUFFERS
 from mujoco.mjx.warp import render as warp_render
 from mujoco.mjx.warp import bvh as warp_bvh
 from mujoco.mjx.warp.types import RenderContext
 import numpy as np
+import sys
 import warp as wp
+
+
+class DeviceDispatchDict(dict):
+  """
+  Dictionary that resolves device-specific context when accessing a key.
+
+  If the value associated with a key is a dict of {device_alias: context},
+  __getitem__ returns the context for the current Warp device.
+  Otherwise, it returns the value directly.
+  """
+
+  def __getitem__(self, key):
+    val = super().__getitem__(key)
+    if isinstance(val, dict):
+      device_alias = wp.get_device().alias
+      if device_alias in val:
+        return val[device_alias]
+      # Fallback if alias not found (e.g., during tracing on CPU)
+      # Return first available context for shape inference
+      return next(iter(val.values()))
+    return val
 
 
 _MODELFILE = flags.DEFINE_string(
@@ -127,28 +151,66 @@ def _save_depth_tiled(depth, out_path):
   print(f'  tiled depth:  {out_path}')
 
 
-class DeviceDispatchDict(dict):
-    """
-    Dictionary that resolves device-specific context when accessing a key.
+_ORIGINAL_BUFFERS = {}
 
-    If the value associated with a key is a dict of {device_alias: context},
-    __getitem__ returns the context for the current Warp device.
-    Otherwise, it returns the value directly.
-    """
+def setup_multigpu_contexts(m, nworld_per_device, devices, width, height, use_textures, use_shadows):
+  """Sets up the multi-GPU rendering environment by patching global buffers."""
+  virtual_key = 999999
+  
+  # Create the smart dictionary
+  smart_dict = DeviceDispatchDict()
+  # Patch modules FIRST so that io.create_render_context writes to our smart_dict
+  _ORIGINAL_BUFFERS['warp_render'] = warp_render._MJX_RENDER_CONTEXT_BUFFERS
+  _ORIGINAL_BUFFERS['warp_bvh'] = warp_bvh._MJX_RENDER_CONTEXT_BUFFERS
+  _ORIGINAL_BUFFERS['io'] = io._MJX_RENDER_CONTEXT_BUFFERS
 
-    def __getitem__(self, key):
-      val = super().__getitem__(key)
-      if isinstance(val, dict):
-        device_alias = wp.get_device().alias
-        if device_alias in val:
-          return val[device_alias]
-        # Fallback if alias not found (e.g., during tracing on CPU)
-        # Return first available context for shape inference
-        return next(iter(val.values()))
-      return val
+  warp_render._MJX_RENDER_CONTEXT_BUFFERS = smart_dict
+  warp_bvh._MJX_RENDER_CONTEXT_BUFFERS = smart_dict
+  io._MJX_RENDER_CONTEXT_BUFFERS = smart_dict
+
+  rcs = []
+  virtual_key_map = {}
+
+  # Create contexts for each device
+  for d in devices:
+    with wp.ScopedDevice(f'cuda:{d.id}'):
+      rc = io.create_render_context(
+          mjm=m,
+          nworld=nworld_per_device,
+          cam_res=(width, height),
+          use_textures=use_textures,
+          use_shadows=use_shadows,
+          render_rgb=True,
+          render_depth=True,
+          enabled_geom_groups=[0, 1, 2],
+      )
+      rcs.append(rc)
+      
+      # Retrieve the underlying Warp object
+      real_warp_rc = smart_dict[rc.key]
+      
+      # Map device alias to real object
+      virtual_key_map[f'cuda:{d.id}'] = real_warp_rc
+
+  smart_dict[virtual_key] = virtual_key_map
+
+  # Return a virtual RC handle and the list of real RCs (for post-processing)
+  virtual_rc = RenderContext(key=virtual_key, _owner=False)
+  return virtual_rc, rcs
+
+
+def restore_multigpu_contexts():
+  """Restores the original global buffers."""
+  if not _ORIGINAL_BUFFERS:
+    return
+  warp_render._MJX_RENDER_CONTEXT_BUFFERS = _ORIGINAL_BUFFERS['warp_render']
+  warp_bvh._MJX_RENDER_CONTEXT_BUFFERS = _ORIGINAL_BUFFERS['warp_bvh']
+  io._MJX_RENDER_CONTEXT_BUFFERS = _ORIGINAL_BUFFERS['io']
+  _ORIGINAL_BUFFERS.clear()
 
 
 def render_pipeline(m, mx, worldids, rc):
+
   # Init
   @jax.vmap
   def init_fn(worldid):
@@ -210,27 +272,6 @@ def _main(_: Sequence[str]):
 
   mx = mjx.put_model(m, impl='warp')
 
-  # Patch buffer dictionary
-  dispatch_buffers = DeviceDispatchDict()
-  io._MJX_RENDER_CONTEXT_BUFFERS = dispatch_buffers
-  # Also patch render module's reference if it imported it separately
-  warp_render._MJX_RENDER_CONTEXT_BUFFERS = dispatch_buffers
-  warp_bvh._MJX_RENDER_CONTEXT_BUFFERS = dispatch_buffers
-
-  # Monkey-patch shims to ensure correct Warp device scope in pmap threads.
-  def patch_shim(original_shim):
-      @functools.wraps(original_shim)
-      def patched(*args):
-          for arg in args:
-              if hasattr(arg, 'device'):
-                  with wp.ScopedDevice(arg.device):
-                      return original_shim(*args)
-          return original_shim(*args)
-      return patched
-
-  warp_render._render_shim = patch_shim(warp_render._render_shim)
-  warp_bvh._refit_bvh_shim = patch_shim(warp_bvh._refit_bvh_shim)
-
   if _USE_PMAP.value:
     devices = jax.local_devices()
     num_devices = len(devices)
@@ -243,50 +284,40 @@ def _main(_: Sequence[str]):
       )
     nworld_per_device = nworld // num_devices
 
-    # Create contexts for each device
-    multi_device_ctx = {}
-    ctx_key = 99999
-
-    for i, device in enumerate(devices):
-      wp_device = f'cuda:{device.id}'
-      with wp.ScopedDevice(wp_device):
-        print(f'Creating context for device {wp_device}...')
-        rc_wrapper_returned = io.create_render_context(
-            mjm=m,
-            nworld=nworld_per_device,
-            cam_res=(_WIDTH.value, _HEIGHT.value),
-            use_textures=_USE_TEXTURES.value,
-            use_shadows=_USE_SHADOWS.value,
-            render_rgb=True,
-            render_depth=True,
-            enabled_geom_groups=[0, 1, 2],
-        )
-        rc = dispatch_buffers.pop(rc_wrapper_returned.key)
-        multi_device_ctx[wp_device] = rc
-
-    dispatch_buffers[ctx_key] = multi_device_ctx
-    rc_wrapper = RenderContext(ctx_key, _owner=False)
+    # Set up multi-GPU environment
+    virtual_rc, rcs = setup_multigpu_contexts(
+        m, nworld_per_device, devices, 
+        _WIDTH.value, _HEIGHT.value, 
+        _USE_TEXTURES.value, _USE_SHADOWS.value
+    )
 
     worldids = jp.arange(nworld).reshape(num_devices, nworld_per_device)
-    mx_replicated = jax.device_put_replicated(mx, devices)
     
-    pmap_pipeline = jax.pmap(functools.partial(render_pipeline, m), axis_name='device')
+    # Replicate mx to all devices
+    mx = jax.device_put_replicated(mx, devices)
+
+    pmap_pipeline = jax.pmap(
+        render_pipeline,
+        in_axes=(None, 0, 0, None),
+        static_broadcasted_argnums=(0, 3), # m and rc are static
+    )
 
     print('running pmap pipeline...')
-    out_pmap = pmap_pipeline(mx_replicated, worldids, rc_wrapper)
+    out_pmap = pmap_pipeline(m, mx, worldids, virtual_rc)
     out_pmap = jax.block_until_ready(out_pmap)
 
     rgb_pmap = out_pmap[0]
     depth_pmap = out_pmap[1]
     
+    # Combine results from devices
     rgb_packed = rgb_pmap.reshape((nworld,) + rgb_pmap.shape[2:])
     depth_packed = depth_pmap.reshape((nworld,) + depth_pmap.shape[2:])
     
     rgb = jax.vmap(render_util.get_rgb, in_axes=(None, None, 0))(
-      rc_wrapper, _CAMERA_ID.value, rgb_packed
+      rc, _CAMERA_ID.value, rgb_packed
     )
     depth = jax.vmap(render_util.get_depth, in_axes=(None, None, 0, None))(
-      rc_wrapper, _CAMERA_ID.value, depth_packed, 4.0
+      rc, _CAMERA_ID.value, depth_packed, 4.0
     )
 
     single_path = os.path.join(_OUTPUT_DIR.value, f'camera_{_CAMERA_ID.value}.png')
@@ -361,7 +392,6 @@ def _main(_: Sequence[str]):
     _save_tiled(depth_rgb, depth_tiled_path)
 
   print('\ndone.')
-
 
 def main():
   app.run(_main)
