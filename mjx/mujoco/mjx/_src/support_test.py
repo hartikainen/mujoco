@@ -202,6 +202,11 @@ class SupportTest(parameterized.TestCase):
     # test getting
     np.testing.assert_array_equal(mx.bind(s.bodies).pos, m.body_pos)
     np.testing.assert_array_equal(dx.bind(mx, s.bodies).xpos, d.xpos)
+
+    # Check that slice of length 1 behaves as expected for pos
+    np.testing.assert_array_equal(m.bind(s.bodies[0:1]).pos, [m.body_pos[0]])
+    np.testing.assert_array_equal(mx.bind(s.bodies[0:1]).pos, [m.body_pos[0]])
+
     np.testing.assert_array_equal(m.bind(s.bodies[0]).mass, m.body_mass[0])
     np.testing.assert_array_equal(m.bind(s.bodies[0:1]).mass, [m.body_mass[0]])
     np.testing.assert_array_equal(mx.bind(s.bodies[0]).mass, m.body_mass[0])
@@ -217,8 +222,13 @@ class SupportTest(parameterized.TestCase):
           dx.bind(mx, s.bodies[i]).xfrc_applied, d.xfrc_applied[i, :]
       )
 
+    # Check that slice of length 1 behaves as expected for size
     np.testing.assert_array_equal(mx.bind(s.geoms).size, m.geom_size)
     np.testing.assert_array_equal(dx.bind(mx, s.geoms).xpos, d.geom_xpos)
+
+    np.testing.assert_array_equal(m.bind(s.geoms[0:1]).size, [m.geom_size[0]])
+    np.testing.assert_array_equal(mx.bind(s.geoms[0:1]).size, [m.geom_size[0]])
+
     for i in range(m.ngeom):
       np.testing.assert_array_equal(m.bind(s.geoms[i]).size, m.geom_size[i, :])
       np.testing.assert_array_equal(mx.bind(s.geoms[i]).size, m.geom_size[i, :])
