@@ -68,6 +68,7 @@ class ForwardTest(parameterized.TestCase):
       if not mjxw.WARP_INSTALLED:
         self.skipTest('Warp not installed.')
 
+    jax.clear_caches()
     batch_size = 7
     m = test_util.load_test_file(xml)
     mx = mjx.put_model(m, impl='warp')
@@ -189,6 +190,7 @@ class ForwardTest(parameterized.TestCase):
       tu.assert_attr_eq(dx, d, 'qfrc_fluid')
       tu.assert_attr_eq(dx, d, 'qfrc_passive')
       tu.assert_attr_eq(dx, d, 'qfrc_bias')
+      # NOTE(hartikainen): This fails due to some weird sorting of keys.
       tu.assert_efc_eq(d, dx, worldid=i)
 
       # fwd_actuation
