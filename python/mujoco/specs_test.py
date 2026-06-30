@@ -1947,10 +1947,12 @@ class SpecsTest(absltest.TestCase):
     self.assertGreater(nbytes, 0)
 
     # Load the archive from a directory where the referenced assets are not
-    # present to verify they were bundled into the archive.
+    # present to verify they were bundled into the archive. The archive is
+    # mounted into a VFS that must stay alive for both parsing and compilation.
     os.chdir(archive_dir.full_path)
-    spec1 = mujoco.MjSpec.from_file(archive_path)
-    spec1.compile()
+    vfs = mujoco.MjVfs()
+    spec1 = mujoco.MjSpec.from_file(archive_path, vfs=vfs)
+    spec1.compile(vfs)
 
   def test_encode_includes_assets_from_references(self):
     archive_dir = self.create_tempdir()
@@ -1963,8 +1965,11 @@ class SpecsTest(absltest.TestCase):
     model0 = spec0.compile()
     spec0.encode(archive_path, model0)
 
-    spec1 = mujoco.MjSpec.from_file(archive_path)
-    spec1.compile()
+    # The archive is mounted into a VFS that must stay alive for both parsing
+    # and compilation of the decoded spec.
+    vfs = mujoco.MjVfs()
+    spec1 = mujoco.MjSpec.from_file(archive_path, vfs=vfs)
+    spec1.compile(vfs)
 
   def test_rangefinder_sensor(self):
     """Test rangefinder sensor with mjSpec, iterative model building."""
