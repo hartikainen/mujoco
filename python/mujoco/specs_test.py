@@ -18,7 +18,7 @@ import gc
 import inspect
 import math
 import os
-from pathlib import Path
+import shutil
 import textwrap
 import typing
 import warnings
@@ -1915,20 +1915,18 @@ class SpecsTest(absltest.TestCase):
         string_spec.compile()
         self.assertEqual(spec.to_xml(), string_spec.to_xml())
 
-  def test_to_zip_includes_assets(self):
+  def test_encode_includes_assets(self):
     testdata_path = epath.resource_path("mujoco") / "testdata"
     asset_filename = 'abdomen_1_body.msh'
     texture_filename = 'checkerboard.png'
 
-    temp_dir = self.create_tempdir()
-
-    import shutil
-    shutil.copy(testdata_path / asset_filename, temp_dir.full_path)
-    shutil.copy(testdata_path / texture_filename, temp_dir.full_path)
+    asset_dir = self.create_tempdir()
+    shutil.copy(testdata_path / asset_filename, asset_dir.full_path)
+    shutil.copy(testdata_path / texture_filename, asset_dir.full_path)
 
     cwd = os.getcwd()
     self.addCleanup(os.chdir, cwd)
-    os.chdir(temp_dir.full_path)
+    os.chdir(asset_dir.full_path)
 
     spec = mujoco.MjSpec()
     spec.modelname = 'test_model'
@@ -1940,32 +1938,33 @@ class SpecsTest(absltest.TestCase):
     texture.file = texture_filename
     texture.type = mujoco.mjtTexture.mjTEXTURE_2D
 
-    zip_filename = 'model.zip'
-    spec.to_zip(zip_filename)
+    model = spec.compile()
 
-    with zipfile.ZipFile(zip_filename, 'r') as z:
-      self.assertIn(asset_filename, z.namelist())
-      with open(asset_filename, 'rb') as f:
-        self.assertEqual(z.read(asset_filename), f.read())
-      self.assertIn(texture_filename, z.namelist())
-      with open(texture_filename, 'rb') as f:
-        self.assertEqual(z.read(texture_filename), f.read())
-      self.assertIn('test_model.xml', z.namelist())
+    # Encode to a self-contained archive that bundles the referenced assets.
+    archive_dir = self.create_tempdir()
+    archive_path = os.path.join(archive_dir.full_path, 'model.mjz')
+    nbytes = spec.encode(archive_path, model)
+    self.assertGreater(nbytes, 0)
 
-    spec1 = mujoco.MjSpec.from_zip(zip_filename)
-    model = spec1.compile()
+    # Load the archive from a directory where the referenced assets are not
+    # present to verify they were bundled into the archive.
+    os.chdir(archive_dir.full_path)
+    spec1 = mujoco.MjSpec.from_file(archive_path)
+    spec1.compile()
 
-  def test_to_zip_includes_assets_from_references(self):
-    temp_dir = self.create_tempdir()
-    temp_dir_path = epath.Path(temp_dir.full_path)
+  def test_encode_includes_assets_from_references(self):
+    archive_dir = self.create_tempdir()
+    archive_path = os.path.join(archive_dir.full_path, 'cube.mjz')
+    model_path = (
+        epath.resource_path("mujoco") / "testdata" / "franka_fr3" / "scene.xml"
+    )
 
-    zip_path = temp_dir_path / "cube.zip"
-    mesh_model_path = epath.resource_path("mujoco") / "testdata" / "franka_fr3" / "scene.xml"
+    spec0 = mujoco.MjSpec.from_file(model_path.as_posix())
+    model0 = spec0.compile()
+    spec0.encode(archive_path, model0)
 
-    spec0 = mujoco.MjSpec.from_file(mesh_model_path.as_posix())
-    spec0.to_zip(zip_path.as_posix())
-    spec1 = mujoco.MjSpec.from_zip(zip_path.as_posix())
-    model = spec1.compile()
+    spec1 = mujoco.MjSpec.from_file(archive_path)
+    spec1.compile()
 
   def test_rangefinder_sensor(self):
     """Test rangefinder sensor with mjSpec, iterative model building."""
