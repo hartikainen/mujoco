@@ -14,13 +14,189 @@
 # ==============================================================================
 """MJX Warp render context types and buffer registry."""
 
+import copy
+import dataclasses
+import functools
+import itertools
 import threading
+import weakref
 
 from mujoco.mjx._src import dataclasses as mjx_dataclasses
 
-
 _MJX_RENDER_CONTEXT_LOCK = threading.Lock()
 _MJX_RENDER_CONTEXT_BUFFERS = {}
+_RENDER_ASSETS = weakref.WeakValueDictionary()
+_RENDER_ASSETS_IDS = itertools.count()
+
+
+def _signature(value):
+  import warp as wp  # pylint: disable=g-import-not-at-top
+
+  if isinstance(value, wp.array):
+    return value.dtype, value.shape
+  if dataclasses.is_dataclass(value):
+    return tuple(
+        _signature(getattr(value, f.name)) for f in dataclasses.fields(value)
+    )
+  return repr(value)
+
+
+def _stage(value, copies):
+  import warp as wp  # pylint: disable=g-import-not-at-top
+
+  if isinstance(value, wp.array):
+    staged = wp.empty_like(value)
+    copies.append(staged)
+    return staged
+  if dataclasses.is_dataclass(value):
+    staged = copy.copy(value)
+    for field in dataclasses.fields(value):
+      object.__setattr__(
+          staged, field.name, _stage(getattr(value, field.name), copies)
+      )
+    return staged
+  return value
+
+
+def _arrays(value):
+  import warp as wp  # pylint: disable=g-import-not-at-top
+
+  if isinstance(value, wp.array):
+    yield value
+  elif dataclasses.is_dataclass(value):
+    for field in dataclasses.fields(value):
+      yield from _arrays(getattr(value, field.name))
+
+
+class _RenderWorkspace:
+  """Owns mutable rendering resources and their completion event."""
+
+  def __init__(self, model, assets, m, d):
+    from mujoco.mjx.third_party.mujoco_warp._src import render_util  # pylint: disable=g-import-not-at-top
+    import warp as wp  # pylint: disable=g-import-not-at-top
+
+    self.context = render_util.create_render_workspace(model, assets, d.nworld)
+    self.inputs = []
+    self.model = _stage(m, self.inputs)
+    self.data = _stage(d, self.inputs)
+    self.graph = None
+    self.done = wp.Event() if wp.get_device().is_cuda else None
+    self.pending = False
+
+  def render(self, m, d, outputs, use_cuda_graph):
+    from mujoco.mjx.third_party import mujoco_warp as mjwarp  # pylint: disable=g-import-not-at-top
+    import warp as wp  # pylint: disable=g-import-not-at-top
+
+    if self.pending:
+      wp.wait_event(self.done)
+    try:
+      for dst, src in zip(self.inputs, (*_arrays(m), *_arrays(d))):
+        wp.copy(dst, src)
+      if use_cuda_graph and wp.get_device().is_cuda:
+        if self.graph is None:
+          with wp.ScopedCapture() as capture:
+            mjwarp.refit_bvh(self.model, self.data, self.context)
+            mjwarp.render(self.model, self.data, self.context)
+          self.graph = capture.graph
+        wp.capture_launch(self.graph)
+      else:
+        mjwarp.refit_bvh(self.model, self.data, self.context)
+        mjwarp.render(self.model, self.data, self.context)
+      for dst, src in zip(
+          outputs,
+          (
+              self.context.rgb_data,
+              self.context.depth_data,
+              self.context.seg_data,
+          ),
+      ):
+        wp.copy(dst, src)
+    finally:
+      if self.done is not None:
+        wp.record_event(self.done)
+        self.pending = True
+
+  def __del__(self):
+    if getattr(self, 'pending', False):
+      try:
+        import warp as wp  # pylint: disable=g-import-not-at-top
+        wp.synchronize_event(self.done)
+      except (ImportError, AttributeError, TypeError):
+        pass
+
+
+class RenderAssets:
+  """Owns immutable assets and serializes device workspace reuse.
+
+  Compiled executables retain this owner through their execution lifetime.
+  CUDA events order reuse through device completion, including output copies.
+  """
+
+  def __init__(self, model, device=None, **kwargs):
+    from mujoco.mjx.third_party.mujoco_warp._src import render_util  # pylint: disable=g-import-not-at-top
+    import warp as wp  # pylint: disable=g-import-not-at-top
+
+    self._model = copy.copy(model)
+    self._options = copy.deepcopy(kwargs)
+    self._lock = threading.RLock()
+    self._bound = {}
+    self._workspaces = {}
+    self._devices = {}
+    with wp.ScopedDevice(device):
+      self.metadata = render_util.create_render_assets(
+          self._model, **self._options
+      )
+      ready = wp.record_event() if wp.get_device().is_cuda else None
+      self._devices[wp.get_device().alias] = self.metadata, ready
+    with _MJX_RENDER_CONTEXT_LOCK:
+      self.key = next(_RENDER_ASSETS_IDS)
+      _RENDER_ASSETS[self.key] = self
+
+  def bind(self, function):
+    """Binds an FFI callback without retaining resources in its global registry."""
+    with self._lock:
+      if function not in self._bound:
+        reference = weakref.ref(self)
+
+        @functools.wraps(function)
+        def bound(*args, **kwargs):
+          owner = reference()
+          if owner is None:
+            raise RuntimeError('Rendering assets have been released.')
+          with owner._lock:
+            return function(*args, **kwargs)
+
+        self._bound[function] = bound
+      return self._bound[function]
+
+  def render(self, m, d, outputs, use_cuda_graph):
+    from mujoco.mjx.third_party.mujoco_warp._src import render_util  # pylint: disable=g-import-not-at-top
+    import warp as wp  # pylint: disable=g-import-not-at-top
+
+    device = wp.get_device()
+    with self._lock:
+      if device.alias not in self._devices:
+        assets = render_util.create_render_assets(self._model, **self._options)
+        ready = wp.record_event() if device.is_cuda else None
+        self._devices[device.alias] = assets, ready
+      assets, ready = self._devices[device.alias]
+      if ready is not None:
+        wp.wait_event(ready)
+      key = device.alias, _signature(m), _signature(d), use_cuda_graph
+      if key not in self._workspaces:
+        self._workspaces[key] = _RenderWorkspace(self._model, assets, m, d)
+      self._workspaces[key].render(m, d, outputs, use_cuda_graph)
+
+
+class RenderContextValue(mjx_dataclasses.PyTreeNode):
+  """Batch-independent render configuration retaining its immutable assets."""
+
+  assets: RenderAssets
+
+
+def render_frame(key, m, d, rgb, depth, seg, use_cuda_graph):
+  """Renders with workspace owned by the FFI asset reference."""
+  _RENDER_ASSETS[key].render(m, d, (rgb, depth, seg), use_cuda_graph)
 
 
 class RenderContext:
@@ -72,6 +248,8 @@ class RenderContextPytree(mjx_dataclasses.PyTreeNode):
 
 def get(rc: RenderContextPytree):
   """Validates and returns the backing Warp render context."""
+  if isinstance(rc, RenderContextValue):
+    return rc.assets.metadata
   if not isinstance(rc, RenderContextPytree):
     raise TypeError(
         f'Expected RenderContextPytree, got {type(rc).__name__}.'

@@ -30,7 +30,6 @@ from mujoco.mjx.warp import types as mjxw_types
 import jax
 from mujoco.mjx.third_party import mujoco_warp  # pylint: disable=unused-import
 
-
 _MJWARP_FUNCTION = flags.DEFINE_string(
     'mjwarp_function',
     'third_party/py/mujoco_warp/_src/smooth.py:kinematics',
@@ -92,6 +91,7 @@ def _clean_type(type_: str):
       'BlockDim',
       'vec_pluginattr',
   )
+
   # Match and convert custom mujoco_warp array annotations (e.g. within tuple[...]).
   def _tuple_array(m):
     args = [a.strip() for a in m.group(1).split(',')]
@@ -146,7 +146,9 @@ def _get_stage_fields(
     # stage_in: Option/OptionWarp jax.Array input fields
     elif field.startswith('opt__'):
       sub_field = field.split('opt__')[-1]
-      if is_jax_array(mjx_types.Option, sub_field) or is_jax_array(OptionWarp, sub_field):
+      if is_jax_array(mjx_types.Option, sub_field) or is_jax_array(
+          OptionWarp, sub_field
+      ):
         stage_in.append(field)
 
   # stage_in: Data/DataWarp jax.Array input fields
@@ -162,7 +164,7 @@ def _get_stage_fields(
   return sorted(stage_in), sorted(stage_out)
 
 
-def _top_level_imports(field_usage: trace.FieldUsage):
+def _top_level_imports(field_usage: trace.FieldUsage, fn_name: str):
   """Returns top-level imports."""
   imports = '''
 """DO NOT EDIT. This file is auto-generated."""
@@ -176,7 +178,13 @@ import jax
 from mujoco.mjx.third_party.mujoco_warp._src import types as mjwp_types
 '''
 
-  if field_usage.render_context_in_caller:
+  if fn_name == 'render_frame':
+    imports += """
+from mujoco.mjx.warp import render_context
+from mujoco.mjx.warp import render_ffi
+from mujoco.mjx.warp.render_context import RenderContextValue
+"""
+  elif field_usage.render_context_in_caller:
     imports += (
         """
 from mujoco.mjx.warp.render_context import """
@@ -250,11 +258,20 @@ def _warp_function(
 
   render_context_args = []
   render_context_call_arg = ''
-  if field_usage.render_context_in_caller:
+  if fn_name == 'render_frame':
+    render_context_args = [
+        'rc_id: int,',
+        'use_cuda_graph: bool,',
+        'rgb: wp.array2d[wp.uint32],',
+        'depth: wp.array2d[wp.float32],',
+        'seg: wp.array2d[wp.vec2i],',
+    ]
+  elif field_usage.render_context_in_caller:
     render_context_args = ['# Registry', 'rc_id: int,']
     render_context_call_arg = ', render_context'
     fn_assignments.append(
-        f'  render_context = {_RENDER_CONTEXT_BUFFER_NAME}[(rc_id, wp.get_device().ordinal)]'
+        f'  render_context = {_RENDER_CONTEXT_BUFFER_NAME}[(rc_id,'
+        ' wp.get_device().ordinal)]'
     )
 
     if fn_name == 'render':
@@ -270,17 +287,26 @@ def _warp_function(
       fn_assignments.append('  output_token.zero_()')
 
   token_args = []
-  if field_usage.render_context_in_caller:
-    token_args.append('_jax_token: wp.array[int],')  # pyrefly: ignore[bad-argument-type]
+  if field_usage.render_context_in_caller and fn_name != 'render_frame':
+    token_args.append(
+        '_jax_token: wp.array[int],'
+    )  # pyrefly: ignore[bad-argument-type]
 
   fn_call = f'mjwarp.{fn_name}(_m, _d{render_context_call_arg})'
+  if fn_name == 'render_frame':
+    fn_call = (
+        'render_context.render_frame('
+        'rc_id, _m, _d, rgb, depth, seg, use_cuda_graph)'
+    )
   fn_args_raw = fn_args_model + fn_args_data + token_args + render_context_args
 
   # create an output token if there are no output fields
   needs_output_token = not field_usage.data_out_fields
-  if needs_output_token and fn_name != 'render':
+  if needs_output_token and fn_name not in ('render', 'render_frame'):
     fn_args_raw.append('# Output token')  # pyrefly: ignore[bad-argument-type]
-    fn_args_raw.append('output_token: wp.array[int],')  # pyrefly: ignore[bad-argument-type]
+    fn_args_raw.append(
+        'output_token: wp.array[int],'
+    )  # pyrefly: ignore[bad-argument-type]
 
   return fn_args_raw, fn_assignments, fn_call
 
@@ -304,16 +330,16 @@ def _jax_shim_fn(
 
   for arg in warp_fn_args:
     if 'nworld' in arg:
-      if field_usage.render_context_in_caller:
+      if field_usage.render_context_in_caller and fn_name != 'render_frame':
         jax_args.append('render_ctx.nworld')
       else:
         jax_args.append('d.qpos.shape[0]')
       continue
 
-    if arg in ('rc_id', 'output_token', '_jax_token'):
+    if arg in ('rc_id', 'output_token', '_jax_token', 'use_cuda_graph'):
       continue
 
-    if arg in ('rgb', 'depth', 'seg') and fn_name == 'render':
+    if arg in ('rgb', 'depth', 'seg') and fn_name in ('render', 'render_frame'):
       num_outputs += 1
       continue
 
@@ -361,7 +387,12 @@ def _jax_shim_fn(
     else:
       jax_args.append(arg_jax)
 
-  if field_usage.render_context_in_caller:
+  if fn_name == 'render_frame':
+    jax_args.extend([
+        'ctx.assets.key',
+        'm.opt._impl.graph_mode != wp.JaxCallableGraphMode.NONE',
+    ])
+  elif field_usage.render_context_in_caller:
     jax_args.append('d._impl._jax_token')
     jax_args.append('ctx.key')
 
@@ -370,7 +401,7 @@ def _jax_shim_fn(
       'array' in mjwarp_field_info[f].expected_type
       for f in field_usage.data_out_fields
   )
-  if needs_output_token and fn_name != 'render':
+  if needs_output_token and fn_name not in ('render', 'render_frame'):
     num_outputs = 1
     output_dims = ["'output_token': (d.qpos.shape[0],)"]
     if field_usage.render_context_in_caller:
@@ -388,9 +419,20 @@ def _jax_shim_fn(
     tree_replace = []
     has_side_effect = True
 
+  if fn_name == 'render_frame':
+    num_outputs = 3
+    output_dims = [
+        "'rgb': (d.qpos.shape[0], *render_ctx.rgb_data.shape[1:])",
+        "'depth': (d.qpos.shape[0], *render_ctx.depth_data.shape[1:])",
+        "'seg': (d.qpos.shape[0], *render_ctx.seg_data.shape[1:], 2)",
+    ]
+    tree_replace = []
+
   render_ctx_param = (
       'ctx: RenderContextPytree' if field_usage.render_context_in_caller else ''
   )
+  if fn_name == 'render_frame':
+    render_ctx_param = 'ctx: RenderContextValue'
   fn_args = ['m: types.Model', 'd: types.Data']
 
   if render_ctx_param:
@@ -428,14 +470,16 @@ def create_jax_warp_shim(
 
   # create top-level imports.
   if not _APPEND_TO_OUTPUT_FILE.value:
-    src += _top_level_imports(field_usage) + '\n\n'
+    src += _top_level_imports(field_usage, fn_name) + '\n\n'
 
   # create global assignments.
   assignments = _global_assignments()
   already_in_src = re.sub(r'\s+', '', assignments) in re.sub(
       r'\s+', '', old_src
   )
-  if not already_in_src or not _APPEND_TO_OUTPUT_FILE.value:
+  if fn_name != 'render_frame' and (
+      not already_in_src or not _APPEND_TO_OUTPUT_FILE.value
+  ):
     src += assignments
 
   # create warp function.
@@ -443,15 +487,22 @@ def create_jax_warp_shim(
       fn_name, field_usage, mjwarp_field_info, mjx_warp_field_info
   )
   fn_args_raw_str = '\n'.join(['    ' + arg for arg in fn_args_raw])
-  warp_fn_args = [arg.split(':')[0] for arg in fn_args_raw if '#' not in arg]  # pytype: disable=attribute-error
+  warp_fn_args = [
+      arg.split(':')[0] for arg in fn_args_raw if '#' not in arg
+  ]  # pytype: disable=attribute-error
 
   fn_assignments_str = '\n'.join(fn_assignments)
+  local_assignments = ''
+  if fn_name == 'render_frame':
+    local_assignments = ''.join(
+        '  ' + line + '\n' for line in assignments.splitlines()
+    )
   src += f"""
 @ffi.format_args_for_warp
 def _{fn_name}_shim(
 {fn_args_raw_str}
 ):
-  _m.stat = _s
+{local_assignments}  _m.stat = _s
   _m.opt = _o
   _m.callback = _cb
   _d.efc = _e
@@ -475,23 +526,37 @@ def _{fn_name}_shim(
   ) = _jax_shim_fn(fn_name, field_usage, warp_fn_args, mjwarp_field_info)
   render_ctx_line = ''
   return_stmt = 'return d'
-  if field_usage.render_context_in_caller:
-    render_ctx_line = f'  render_ctx = _MJX_RENDER_CONTEXT_BUFFERS[(ctx.key, None)]\n'
-  if fn_name == 'render':
+  shim = f'_{fn_name}_shim'
+  graph_mode = 'm.opt._impl.graph_mode'
+  if fn_name == 'render_frame':
+    render_ctx_line = '  render_ctx = ctx.assets.metadata\n'
+    shim = f'ctx.assets.bind(_{fn_name}_shim)'
+    graph_mode = 'wp.JaxCallableGraphMode.NONE'
+  elif field_usage.render_context_in_caller:
+    render_ctx_line = (
+        f'  render_ctx = _MJX_RENDER_CONTEXT_BUFFERS[(ctx.key, None)]\n'
+    )
+  if fn_name in ('render', 'render_frame'):
     return_stmt = 'return out'
+  jax_impl_decorator = ''
+  if fn_name == 'render_frame':
+    return_stmt = 'return render_ffi.keepalive(out, ctx.assets)'
+    jax_impl_decorator = '@functools.partial(jax.jit, inline=True)\n'
   output_dims_str = '{' + ','.join(output_dims) + '}'
   data_tree_replace = f"d = d.tree_replace({{ {','.join(tree_replace)} }})"
+  if fn_name == 'render_frame':
+    data_tree_replace = ''
   src += f"""
-def _{fn_name}_jax_impl({','.join(fn_args)}):
+{jax_impl_decorator}def _{fn_name}_jax_impl({','.join(fn_args)}):
 {render_ctx_line}  output_dims = {output_dims_str}
   jf = ffi.jax_callable_variadic_tuple(
-      _{fn_name}_shim, num_outputs={num_outputs},
+      {shim}, num_outputs={num_outputs},
       output_dims=output_dims,
       vmap_method=None,
       in_out_argnames=set([{','.join(in_out_argnames)}]),
       stage_in_argnames=set([{','.join(stage_in_argnames)}]),
       stage_out_argnames=set([{','.join(stage_out_argnames)}]),
-      graph_mode=m.opt._impl.graph_mode,
+      graph_mode={graph_mode},
       has_side_effect={has_side_effect},
   )
   out = jf({','.join(jax_args)})
@@ -507,7 +572,7 @@ def _{fn_name}_jax_impl({','.join(fn_args)}):
   marshal_decorator = '@ffi.marshal_jax_warp_callable'
   marshal_vmap_decorator = '@ffi.marshal_custom_vmap'
   vmap_return_stmt = f'd = {fn_name}({fn_call_str})\n  return d, is_batched[1]'
-  if fn_name == 'render':
+  if fn_name in ('render', 'render_frame'):
     marshal_decorator = (
         '@functools.partial('
         'ffi.marshal_jax_warp_callable, tree_map_output=True)'
@@ -519,6 +584,14 @@ def _{fn_name}_jax_impl({','.join(fn_args)}):
         f'out = {fn_name}({fn_call_str})\n  return out, [True, True, True,'
         ' is_batched[1]._impl._jax_token]'
     )
+    if fn_name == 'render_frame':
+      marshal_decorator = (
+          '@functools.partial(ffi.marshal_jax_warp_callable, '
+          'tree_map_output=True, squeeze_output=True)'
+      )
+      vmap_return_stmt = (
+          f'out = {fn_name}({fn_call_str})\n  return out, [True, True, True]'
+      )
 
   src += f"""
 @jax.custom_batching.custom_vmap
@@ -562,6 +635,8 @@ def main(argv: Sequence[str]) -> None:
   target_fpath = (
       base_path / _MJX_WARP_OUTPUT_PATH.value / epath.Path(fpath).name
   )
+  if fn_name == 'render_frame':
+    target_fpath = target_fpath.with_name('render_frame.py')
   create_jax_warp_shim(
       fn_name, field_usage, mjwarp_field_info, mjx_warp_field_info, target_fpath
   )

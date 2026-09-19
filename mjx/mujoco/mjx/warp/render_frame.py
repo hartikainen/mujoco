@@ -1,0 +1,297 @@
+# Copyright 2026 DeepMind Technologies Limited
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+"""DO NOT EDIT. This file is auto-generated."""
+
+import dataclasses
+import functools
+
+import jax
+import warp as wp
+
+from mujoco.mjx._src import types
+import mujoco.mjx.third_party.mujoco_warp as mjwarp
+from mujoco.mjx.third_party.mujoco_warp._src import types as mjwp_types
+from mujoco.mjx.warp import ffi
+from mujoco.mjx.warp import render_context
+from mujoco.mjx.warp import render_ffi
+from mujoco.mjx.warp.render_context import RenderContextValue
+
+
+@ffi.format_args_for_warp
+def _render_frame_shim(
+    # Model
+    nworld: int,
+    block_dim: mjwp_types.BlockDim,
+    cam_fovy: wp.array2d[float],
+    cam_intrinsic: wp.array2d[wp.vec4],
+    cam_projection: wp.array[int],
+    cam_sensorsize: wp.array[wp.vec2],
+    flex_dim: wp.array[int],
+    flex_edge: wp.array[wp.vec2i],
+    flex_elem: wp.array[int],
+    flex_elemadr: wp.array[int],
+    flex_elemdataadr: wp.array[int],
+    flex_elemnum: wp.array[int],
+    flex_radius: wp.array[float],
+    flex_shell: wp.array[int],
+    flex_shelldataadr: wp.array[int],
+    flex_vertadr: wp.array[int],
+    flex_vertnum: wp.array[int],
+    geom_dataid: wp.array2d[int],
+    geom_matid: wp.array2d[int],
+    geom_rgba: wp.array2d[wp.vec4],
+    geom_size: wp.array2d[wp.vec3],
+    geom_type: wp.array[int],
+    light_active: wp.array2d[bool],
+    light_ambient: wp.array2d[wp.vec3],
+    light_attenuation: wp.array2d[wp.vec3],
+    light_castshadow: wp.array2d[bool],
+    light_cutoff: wp.array2d[float],
+    light_diffuse: wp.array2d[wp.vec3],
+    light_exponent: wp.array2d[float],
+    light_specular: wp.array2d[wp.vec3],
+    light_type: wp.array2d[int],
+    mat_emission: wp.array2d[float],
+    mat_rgba: wp.array2d[wp.vec4],
+    mat_shininess: wp.array2d[float],
+    mat_specular: wp.array2d[float],
+    mat_texid: wp.array3d[int],
+    mat_texrepeat: wp.array2d[wp.vec2],
+    mesh_faceadr: wp.array[int],
+    mesh_normal: wp.array[wp.vec3],
+    mesh_normaladr: wp.array[int],
+    nflex: int,
+    nflexelem: int,
+    nlight: int,
+    # Data
+    cam_xmat: wp.array2d[wp.mat33],
+    cam_xpos: wp.array2d[wp.vec3],
+    flexvert_xpos: wp.array2d[wp.vec3],
+    geom_xmat: wp.array2d[wp.mat33],
+    geom_xpos: wp.array2d[wp.vec3],
+    light_xdir: wp.array2d[wp.vec3],
+    light_xpos: wp.array2d[wp.vec3],
+    rc_id: int,
+    use_cuda_graph: bool,
+    rgb: wp.array2d[wp.uint32],
+    depth: wp.array2d[wp.float32],
+    seg: wp.array2d[wp.vec2i],
+):
+  _m = mjwarp.Model(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Model) if f.init}
+  )
+  _d = mjwarp.Data(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Data) if f.init}
+  )
+  _o = mjwarp.Option(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Option) if f.init}
+  )
+  _s = mjwarp.Statistic(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Statistic) if f.init}
+  )
+  _c = mjwarp.Contact(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Contact) if f.init}
+  )
+  _e = mjwarp.Constraint(
+      **{f.name: None for f in dataclasses.fields(mjwarp.Constraint) if f.init}
+  )
+  _cb = mjwp_types.Callback(**{
+      f.name: None for f in dataclasses.fields(mjwp_types.Callback) if f.init
+  })
+  _m.stat = _s
+  _m.opt = _o
+  _m.callback = _cb
+  _d.efc = _e
+  _d.contact = _c
+  _m.block_dim = block_dim
+  _m.cam_fovy = cam_fovy
+  _m.cam_intrinsic = cam_intrinsic
+  _m.cam_projection = cam_projection
+  _m.cam_sensorsize = cam_sensorsize
+  _m.flex_dim = flex_dim
+  _m.flex_edge = flex_edge
+  _m.flex_elem = flex_elem
+  _m.flex_elemadr = flex_elemadr
+  _m.flex_elemdataadr = flex_elemdataadr
+  _m.flex_elemnum = flex_elemnum
+  _m.flex_radius = flex_radius
+  _m.flex_shell = flex_shell
+  _m.flex_shelldataadr = flex_shelldataadr
+  _m.flex_vertadr = flex_vertadr
+  _m.flex_vertnum = flex_vertnum
+  _m.geom_dataid = geom_dataid
+  _m.geom_matid = geom_matid
+  _m.geom_rgba = geom_rgba
+  _m.geom_size = geom_size
+  _m.geom_type = geom_type
+  _m.light_active = light_active
+  _m.light_ambient = light_ambient
+  _m.light_attenuation = light_attenuation
+  _m.light_castshadow = light_castshadow
+  _m.light_cutoff = light_cutoff
+  _m.light_diffuse = light_diffuse
+  _m.light_exponent = light_exponent
+  _m.light_specular = light_specular
+  _m.light_type = light_type
+  _m.mat_emission = mat_emission
+  _m.mat_rgba = mat_rgba
+  _m.mat_shininess = mat_shininess
+  _m.mat_specular = mat_specular
+  _m.mat_texid = mat_texid
+  _m.mat_texrepeat = mat_texrepeat
+  _m.mesh_faceadr = mesh_faceadr
+  _m.mesh_normal = mesh_normal
+  _m.mesh_normaladr = mesh_normaladr
+  _m.nflex = nflex
+  _m.nflexelem = nflexelem
+  _m.nlight = nlight
+  _d.cam_xmat = cam_xmat
+  _d.cam_xpos = cam_xpos
+  _d.flexvert_xpos = flexvert_xpos
+  _d.geom_xmat = geom_xmat
+  _d.geom_xpos = geom_xpos
+  _d.light_xdir = light_xdir
+  _d.light_xpos = light_xpos
+  _d.nworld = nworld
+  render_context.render_frame(rc_id, _m, _d, rgb, depth, seg, use_cuda_graph)
+
+
+@functools.partial(jax.jit, inline=True)
+def _render_frame_jax_impl(
+    m: types.Model, d: types.Data, ctx: RenderContextValue
+):
+  render_ctx = ctx.assets.metadata
+  output_dims = {
+      'rgb': (d.qpos.shape[0], *render_ctx.rgb_data.shape[1:]),
+      'depth': (d.qpos.shape[0], *render_ctx.depth_data.shape[1:]),
+      'seg': (d.qpos.shape[0], *render_ctx.seg_data.shape[1:], 2),
+  }
+  jf = ffi.jax_callable_variadic_tuple(
+      ctx.assets.bind(_render_frame_shim),
+      num_outputs=3,
+      output_dims=output_dims,
+      vmap_method=None,
+      in_out_argnames=set([]),
+      stage_in_argnames=set([
+          'cam_fovy',
+          'cam_intrinsic',
+          'cam_xmat',
+          'cam_xpos',
+          'flexvert_xpos',
+          'geom_matid',
+          'geom_rgba',
+          'geom_size',
+          'geom_xmat',
+          'geom_xpos',
+          'light_active',
+          'light_ambient',
+          'light_attenuation',
+          'light_castshadow',
+          'light_cutoff',
+          'light_diffuse',
+          'light_exponent',
+          'light_specular',
+          'light_type',
+          'light_xdir',
+          'light_xpos',
+          'mat_emission',
+          'mat_rgba',
+          'mat_shininess',
+          'mat_specular',
+          'mat_texid',
+          'mat_texrepeat',
+      ]),
+      stage_out_argnames=set([]),
+      graph_mode=wp.JaxCallableGraphMode.NONE,
+      has_side_effect=False,
+  )
+  out = jf(
+      d.qpos.shape[0],
+      m._impl.block_dim,
+      m.cam_fovy,
+      m.cam_intrinsic,
+      m._impl.cam_projection,
+      m.cam_sensorsize,
+      m._impl.flex_dim,
+      m._impl.flex_edge,
+      m._impl.flex_elem,
+      m._impl.flex_elemadr,
+      m._impl.flex_elemdataadr,
+      m._impl.flex_elemnum,
+      m._impl.flex_radius,
+      m._impl.flex_shell,
+      m._impl.flex_shelldataadr,
+      m.flex_vertadr,
+      m.flex_vertnum,
+      jax.numpy.expand_dims(m.geom_dataid, 0),
+      m.geom_matid,
+      m.geom_rgba,
+      m.geom_size,
+      m.geom_type,
+      m.light_active,
+      m.light_ambient,
+      m.light_attenuation,
+      m.light_castshadow,
+      m.light_cutoff,
+      m.light_diffuse,
+      m.light_exponent,
+      m.light_specular,
+      m.light_type,
+      m.mat_emission,
+      m.mat_rgba,
+      m.mat_shininess,
+      m.mat_specular,
+      m.mat_texid,
+      m._impl.mat_texrepeat,
+      m.mesh_faceadr,
+      m.mesh_normal,
+      m.mesh_normaladr,
+      m.nflex,
+      m._impl.nflexelem,
+      m.nlight,
+      d.cam_xmat,
+      d.cam_xpos,
+      d._impl.flexvert_xpos,
+      d.geom_xmat,
+      d.geom_xpos,
+      d._impl.light_xdir,
+      d._impl.light_xpos,
+      ctx.assets.key,
+      m.opt._impl.graph_mode != wp.JaxCallableGraphMode.NONE,
+  )
+
+  return render_ffi.keepalive(out, ctx.assets)
+
+
+@jax.custom_batching.custom_vmap
+@functools.partial(
+    ffi.marshal_jax_warp_callable, tree_map_output=True, squeeze_output=True
+)
+def render_frame(m: types.Model, d: types.Data, ctx: RenderContextValue):
+  return _render_frame_jax_impl(m, d, ctx)
+
+
+@render_frame.def_vmap
+@functools.partial(ffi.marshal_custom_vmap, tree_map_output=True)
+def render_frame_vmap(
+    unused_axis_size,
+    is_batched,
+    m: types.Model,
+    d: types.Data,
+    ctx: RenderContextValue,
+):
+  out = render_frame(m, d, ctx)
+  return out, [True, True, True]

@@ -15,20 +15,24 @@
 """BVH helpers for MJX."""
 
 from typing import Any
+
 # pylint: disable=g-importing-member
 from mujoco.mjx._src.types import Data
 from mujoco.mjx._src.types import Impl
 from mujoco.mjx._src.types import Model
+
 # pylint: enable=g-importing-member
 import mujoco.mjx.warp as mjxw
 
 
 def refit_bvh(m: Model, d: Data, ctx: Any):
-  """Refit the scene BVH for the current pose."""
+  """Refit a legacy context, or return `d` for contexts that refit in `render`."""
   if m.impl == Impl.WARP and d.impl == Impl.WARP and mjxw.WARP_INSTALLED:
     import mujoco.mjx.warp.render_context as mjxw_rc  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
     from mujoco.mjx.warp import bvh as mjxw_bvh  # pylint: disable=g-import-not-at-top  # pytype: disable=import-error
 
+    if isinstance(ctx, mjxw_rc.RenderContextValue):
+      return d
     if not isinstance(ctx, mjxw_rc.RenderContextPytree):
       raise TypeError(
           f'Expected RenderContextPytree, got {type(ctx).__name__}.'

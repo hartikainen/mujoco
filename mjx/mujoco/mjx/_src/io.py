@@ -1813,6 +1813,43 @@ def set_state(
   return d.replace(**updates)
 
 
+def put_render_assets(
+    mjm: mujoco.MjModel,
+    device: Optional[jax.Device] = None,
+    **kwargs,
+):
+  """Prepares immutable rendering assets without a world count.
+
+  Call before tracing. Camera layouts and rendering settings are static;
+  execution workspaces follow the device and batch shape of each render call.
+  Splat assets use a shared group selection. CUDA workspaces stage inputs and
+  manage graph capture internally unless `graph_mode` is `NONE`.
+  """
+  _check_warp_installed()
+  from mujoco.mjx.warp import render_context  # pylint: disable=g-import-not-at-top
+
+  splat_group_id = kwargs.get('splat_group_id')
+  if splat_group_id is not None and np.shape(splat_group_id) != (1,):
+    raise ValueError('put_render_assets requires a shared splat group selection.')
+  device = device or _resolve_device(types.Impl.WARP)
+  warp_device = wp.device_from_jax(device)
+  return render_context.RenderAssets(mjm, device=warp_device, **kwargs)
+
+
+def make_render_context(assets):
+  """Constructs a render configuration inside or outside JAX transformations.
+
+  `assets` is the result of `put_render_assets`. The returned value owns no
+  mutable per-world buffers and can be shared across mapped render calls.
+  """
+  _check_warp_installed()
+  from mujoco.mjx.warp import render_context  # pylint: disable=g-import-not-at-top
+
+  if not isinstance(assets, render_context.RenderAssets):
+    raise TypeError('Expected assets from put_render_assets.')
+  return render_context.RenderContextValue(assets)
+
+
 def create_render_context(
     mjm: mujoco.MjModel,
     nworld: int,

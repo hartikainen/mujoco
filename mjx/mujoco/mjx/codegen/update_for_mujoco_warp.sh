@@ -115,5 +115,10 @@ run_shim "render:render" ${generate_warp_shim} \
  --mjx_warp_output_path=${mjx_warp_out}/ \
  --mjwarp_types=${mjwarp}/types.py
 
+run_shim "render:render_frame" ${generate_warp_shim} \
+ --mjwarp_function=${mjwarp}/render.py:render_frame \
+ --mjx_warp_output_path=${mjx_warp_out}/ \
+ --mjwarp_types=${mjwarp}/types.py
+
 log_stage "Done"
 log_ok "All shims generated successfully"

@@ -39,8 +39,10 @@ from mujoco.mjx._src.io import get_data
 from mujoco.mjx._src.io import get_data_into
 from mujoco.mjx._src.io import get_state
 from mujoco.mjx._src.io import make_data
+from mujoco.mjx._src.io import make_render_context
 from mujoco.mjx._src.io import put_data
 from mujoco.mjx._src.io import put_model
+from mujoco.mjx._src.io import put_render_assets
 from mujoco.mjx._src.io import set_state
 from mujoco.mjx._src.io import state_size
 from mujoco.mjx._src.passive import passive

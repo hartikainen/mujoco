@@ -25,15 +25,13 @@ import jax.numpy as jp
 import mediapy as media
 import mujoco
 from mujoco import mjx
-from mujoco.mjx._src import bvh
 from mujoco.mjx._src import forward
+from mujoco.mjx._src import io
 from mujoco.mjx._src import render
 from mujoco.mjx._src import render_util
 from mujoco.mjx._src import test_util
-from mujoco.mjx.warp import io
 import numpy as np
 import warp as wp
-
 
 _MODELFILE = flags.DEFINE_string(
     'modelfile',
@@ -164,10 +162,9 @@ def _main(_: Sequence[str]):
   print('running forward...')
   dx_batch = jax_jit(jax.vmap(forward.forward, in_axes=(None, 0)))(mx, dx_batch)
 
-  print('creating render context...')
-  rc = io.create_render_context(
+  print('preparing render assets...')
+  assets = io.put_render_assets(
       mjm=m,
-      nworld=_NWORLD.value,
       cam_res=(_WIDTH.value, _HEIGHT.value),
       use_textures=_USE_TEXTURES.value,
       use_shadows=_USE_SHADOWS.value,
@@ -177,9 +174,7 @@ def _main(_: Sequence[str]):
       enabled_geom_groups=[0, 1, 2],
   )
 
-  dx_batch = jax_jit(jax.vmap(bvh.refit_bvh, in_axes=(None, 0, None)))(
-      mx, dx_batch, rc.pytree()
-  )
+  rc = io.make_render_context(assets)
 
   if _RENDER_SEGMENTATION.value:
     render_fn = render.render_with_segmentation
@@ -187,7 +182,7 @@ def _main(_: Sequence[str]):
     render_fn = render.render
 
   out_batch = jax_jit(jax.vmap(render_fn, in_axes=(None, 0, None)))(
-      mx, dx_batch, rc.pytree()
+      mx, dx_batch, rc
   )
 
   rgb_packed = out_batch[0]
@@ -200,11 +195,11 @@ def _main(_: Sequence[str]):
   print()
 
   rgb = jax.vmap(render_util.get_rgb, in_axes=(None, None, 0))(
-      rc.pytree(), _CAMERA_ID.value, rgb_packed
+      rc, _CAMERA_ID.value, rgb_packed
   )
 
   depth = jax.vmap(render_util.get_depth, in_axes=(None, None, 0, None))(
-      rc.pytree(), _CAMERA_ID.value, depth_packed, 10.0
+      rc, _CAMERA_ID.value, depth_packed, 10.0
   )
 
   single_path = os.path.join(
@@ -221,7 +216,7 @@ def _main(_: Sequence[str]):
 
   if _RENDER_SEGMENTATION.value:
     seg = jax.vmap(render_util.get_segmentation, in_axes=(None, None, 0))(
-        rc.pytree(), _CAMERA_ID.value, seg_packed
+        rc, _CAMERA_ID.value, seg_packed
     )
     seg_rgb = _colorize_segmentation(np.asarray(seg))
     # Convert to float [0, 1] so _save_single / _save_tiled work.
@@ -259,20 +254,6 @@ def _main(_: Sequence[str]):
     )
     print(f'\nrendering (pmap across {ndevices} devices)...')
 
-    device_strs = [f'cuda:{i}' for i in range(ndevices)]
-
-    pmap_rc = io.create_render_context(
-        mjm=m,
-        nworld=nworld_per_device,
-        devices=device_strs,
-        cam_res=(_WIDTH.value, _HEIGHT.value),
-        use_textures=_USE_TEXTURES.value,
-        use_shadows=_USE_SHADOWS.value,
-        render_rgb=True,
-        render_depth=True,
-        enabled_geom_groups=[0, 1, 2],
-    )
-
     devices = jax.local_devices()[:ndevices]
     mesh = jax.sharding.Mesh(np.array(devices), axis_names=('i',))
     P = jax.sharding.PartitionSpec
@@ -291,14 +272,16 @@ def _main(_: Sequence[str]):
     mx_pmap = jax.tree.map(lambda x: safe_shard(x, sharded), mx)
 
     def inner(mx, dx):
-      dx = bvh.refit_bvh(mx, dx, pmap_rc.pytree())
-      out = render.render(mx, dx, pmap_rc.pytree())
-      return render_util.get_rgb(pmap_rc.pytree(), _CAMERA_ID.value, out[0])
+      ctx = io.make_render_context(assets)
+      out = render.render(mx, dx, ctx)
+      return render_util.get_rgb(ctx, _CAMERA_ID.value, out[0])
 
     inner = jax.vmap(inner, in_axes=(None, 0))
     out = jax.pmap(inner)(mx_pmap, dx_pmap)
 
-    pmap_rgb = jax.device_put(out, jax.devices('cpu')[0]).reshape(-1, *out.shape[2:])
+    pmap_rgb = jax.device_put(out, jax.devices('cpu')[0]).reshape(
+        -1, *out.shape[2:]
+    )
 
     pmap_tiled_path = os.path.join(
         _OUTPUT_DIR.value, f'pmap_tiled_{_CAMERA_ID.value}.png'

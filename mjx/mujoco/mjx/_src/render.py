@@ -23,6 +23,7 @@ import mujoco.mjx.warp as mjxw
 from mujoco.mjx._src.types import Data
 from mujoco.mjx._src.types import Impl
 from mujoco.mjx._src.types import Model
+
 # pylint: enable=g-importing-member
 
 
@@ -49,11 +50,18 @@ def _call_render(
     warp_rc = render_context.get(ctx)
     if require_seg:
       _require_segmentation_enabled(warp_rc)
+    if isinstance(ctx, render_context.RenderContextValue):
+      from mujoco.mjx.warp import render_frame  # pylint: disable=g-import-not-at-top
+
+      rgb, depth, seg = render_frame.render_frame(m, d, ctx)
+      return rgb, depth, seg, d
     rgb, depth, seg, token_array = mjxw_render.render(m, d, ctx)
     token = token_array.reshape(
         d._impl._jax_token.shape  # pytype: disable=attribute-error
     )
-    d = d.tree_replace({'_impl._jax_token': token})  # pyrefly: ignore[bad-assignment]
+    d = d.tree_replace(
+        {'_impl._jax_token': token}
+    )  # pyrefly: ignore[bad-assignment]
     return rgb, depth, seg, d
 
   raise NotImplementedError('render only implemented for MuJoCo Warp.')
@@ -62,9 +70,14 @@ def _call_render(
 def render(m: Model, d: Data, ctx: Any) -> tuple[jax.Array, jax.Array, Data]:
   """Render packed RGB and depth buffers.
 
+  Contexts from `make_render_context` refit acceleration structures internally.
+  Their outputs preserve mapped axes and have no implicit world axis. Their
+  returned `Data` is unchanged.
+
   Returns:
-    A tuple ``(rgb, depth, d)`` where ``rgb`` and ``depth`` are packed buffers
-    and ``d`` is the updated ``Data`` carrying the post-render execution token.
+    `(rgb, depth, d)` with packed image buffers. Legacy contexts return `d`
+    with an execution token; contexts from `make_render_context` return the
+    supplied `d`.
   """
   rgb, depth, unused_seg, d = _call_render(m, d, ctx)
   return rgb, depth, d
@@ -76,8 +89,9 @@ def render_with_segmentation(
   """Render and return RGB, depth, and packed segmentation outputs.
 
   Returns:
-    A tuple ``(rgb, depth, seg, d)`` where the first three are packed buffers
-    and ``d`` is the updated ``Data`` carrying the post-render execution token.
+    `(rgb, depth, seg, d)` with packed image buffers. Contexts from
+    `make_render_context` refit internally and return the supplied `d`;
+    legacy contexts return `d` with an execution token.
   """
   rgb, depth, seg, d = _call_render(m, d, ctx, require_seg=True)
   return rgb, depth, seg, d
