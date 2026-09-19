@@ -27,8 +27,8 @@ import numpy as np
 import warp as wp
 
 from mujoco.mjx._src.types import tree_path_to_attr_str
+from mujoco.mjx.third_party.mujoco_warp._src import warp_util
 from mujoco.mjx.warp import types as mjx_warp_types
-
 
 # ``wp.jax_callable`` keys its registry by wrapper function and
 # configuration. Cache generated wrappers here by the original shim and MJX's
@@ -138,6 +138,38 @@ def jax_callable_variadic_tuple(
     # Provide a flattened signature for the Warp callable machinery.
     flat_args, in_tree = jax.tree.flatten(args)
     new_signature = flatten_signature(inspect.signature(func), args)
+    parameters = tuple(new_signature.parameters.values())
+    empty_inputs = {}
+    if output_dims is not None:
+      for i, arg in enumerate(flat_args):
+        parameter = parameters[i]
+        annotation = parameter.annotation
+        if (
+            getattr(arg, 'size', None) != 0
+            or not warp_util.is_array_spec(annotation)
+            or parameter.name in (hashable_in_out_argnames or ())
+        ):
+          continue
+        scalar_type = getattr(
+            annotation.dtype, '_wp_scalar_type_', annotation.dtype
+        )
+        dtype_shape = getattr(annotation.dtype, '_shape_', ())
+        if (
+            arg.dtype != np.dtype(wp.dtype_to_numpy(scalar_type))
+            or arg.ndim != annotation.ndim + len(dtype_shape)
+            or arg.shape[annotation.ndim :] != dtype_shape
+        ):
+          continue
+        empty_inputs[i] = arg.shape[: annotation.ndim], annotation.dtype
+    # Reconstruct empty read-only arrays without mapped FFI buffer operands.
+    new_signature = new_signature.replace(
+        parameters=[
+            p for i, p in enumerate(parameters) if i not in empty_inputs
+        ]
+    )
+    flat_args = [
+        arg for i, arg in enumerate(flat_args) if i not in empty_inputs
+    ]
     # Cache the wrapper's structural ABI, not per-call leaves. The flattened
     # signature defines Warp's arguments and the PyTree defines reconstruction.
     # Leaf arrays and tracers are forwarded on every invocation; keying on them
@@ -146,6 +178,7 @@ def jax_callable_variadic_tuple(
         func,
         new_signature,
         in_tree,
+        tuple(empty_inputs.items()),
         num_outputs,
         graph_mode,
         vmap_method,
@@ -166,8 +199,14 @@ def jax_callable_variadic_tuple(
 
         # Restore the original PyTree inputs; Warp appends output buffers.
         def func_wrapper(*flat_args, **kwargs):
-          num_inputs = in_tree.num_leaves
-          flat_inputs = flat_args[:num_inputs]
+          num_inputs = in_tree.num_leaves - len(empty_inputs)
+          input_iter = iter(flat_args[:num_inputs])
+          flat_inputs = [
+              wp.empty(shape=empty_inputs[i][0], dtype=empty_inputs[i][1])
+              if i in empty_inputs
+              else next(input_iter)
+              for i in range(in_tree.num_leaves)
+          ]
           output_buffers = flat_args[num_inputs:]
           unflat_args = jax.tree.unflatten(in_tree, flat_inputs)
           return func(*unflat_args, *output_buffers, **kwargs)
@@ -270,7 +309,9 @@ def _expand_dim_from_path(
   if ndim is None or ndim < 0:
     return leaf
   if ndim > leaf.ndim:
-    leaf = jp.expand_dims(leaf, axis=np.arange(ndim - leaf.ndim))  # pyrefly: ignore[bad-argument-type]
+    leaf = jp.expand_dims(
+        leaf, axis=np.arange(ndim - leaf.ndim)
+    )  # pyrefly: ignore[bad-argument-type]
   if ndim != leaf.ndim:
     raise AssertionError(
         f'Leaf node ndim ({leaf.ndim}) and expected ndim ({ndim}) do not match'
@@ -286,11 +327,15 @@ def _squeeze_dim(leaf_expanded: Any, leaf: Any) -> Any:
         f' ndim {leaf.ndim}'
     )
   if leaf_expanded.ndim > leaf.ndim:
-    return jp.squeeze(leaf_expanded, np.arange(leaf_expanded.ndim - leaf.ndim))  # pyrefly: ignore[bad-argument-type]
+    return jp.squeeze(
+        leaf_expanded, np.arange(leaf_expanded.ndim - leaf.ndim)
+    )  # pyrefly: ignore[bad-argument-type]
   return leaf_expanded
 
 
-def marshal_jax_warp_callable(func, tree_map_output: bool = False):
+def marshal_jax_warp_callable(
+    func, tree_map_output: bool = False, squeeze_output: bool = False
+):
   """Marshal fields into a MuJoCo Warp function."""
 
   @functools.wraps(func)
@@ -312,6 +357,8 @@ def marshal_jax_warp_callable(func, tree_map_output: bool = False):
     d_expanded_result = func(m_expanded, d_expanded, *extra_args)
 
     if tree_map_output:
+      if squeeze_output and d.qpos.ndim < d_expanded.qpos.ndim:
+        return jax.tree.map(lambda x: jp.squeeze(x, axis=0), d_expanded_result)
       return d_expanded_result
     d_result = jax.tree.map(_squeeze_dim, d_expanded_result, d)
     return d_result
@@ -370,7 +417,8 @@ def _check_leading_dim(
 ):
   """Asserts that the batch dimension of a leaf node matches the expected batch dimension."""
   has_batch_dim = _get_mapping_from_tree_path(
-      path, mjx_warp_types._BATCH_DIM['Data']  # pyrefly: ignore[bad-argument-type]
+      path,
+      mjx_warp_types._BATCH_DIM['Data'],  # pyrefly: ignore[bad-argument-type]
   )
   attr = tree_path_to_attr_str(path)
   if has_batch_dim and leaf.shape[0] != expected_batch_dim:
@@ -452,7 +500,7 @@ def marshal_custom_vmap(
       out = jax.tree.map(
           lambda x: x
           if x.shape[0] == axis_size
-          else x.reshape(axis_size, -1, *x.shape[1:]),
+          else x.reshape(axis_size, x.shape[0] // axis_size, *x.shape[1:]),
           d_broadcast_flat_result,
       )
       return out, out_batched
