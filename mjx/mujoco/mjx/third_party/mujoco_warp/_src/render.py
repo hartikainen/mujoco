@@ -19,6 +19,7 @@ from typing import Tuple
 import warp as wp
 
 from mujoco.mjx.third_party.mujoco_warp._src import math
+from mujoco.mjx.third_party.mujoco_warp._src.bvh import refit_bvh
 from mujoco.mjx.third_party.mujoco_warp._src.bvh import SPLAT_MIN_RESPONSE
 from mujoco.mjx.third_party.mujoco_warp._src.ray import RAY_TOL_ABS
 from mujoco.mjx.third_party.mujoco_warp._src.ray import RAY_TOL_REL
@@ -1286,3 +1287,9 @@ def render(m: Model, d: Data, rc: RenderContext):
 
   if nsamples > 1:
     wp.launch(_aa_resolve, dim=rc.rgb_data.shape, inputs=[rc.aa_accum, 1.0 / float(nsamples)], outputs=[rc.rgb_data])
+
+
+def render_frame(m: Model, d: Data, rc: RenderContext):
+  """Refits acceleration structures and renders the supplied scene."""
+  refit_bvh(m, d, rc)
+  render(m, d, rc)

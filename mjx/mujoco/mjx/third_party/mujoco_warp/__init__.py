@@ -66,6 +66,7 @@ from mujoco.mjx.third_party.mujoco_warp._src.passive import passive as passive
 from mujoco.mjx.third_party.mujoco_warp._src.ray import ray as ray
 from mujoco.mjx.third_party.mujoco_warp._src.ray import rays as rays
 from mujoco.mjx.third_party.mujoco_warp._src.render import render as render
+from mujoco.mjx.third_party.mujoco_warp._src.render import render_frame as render_frame
 from mujoco.mjx.third_party.mujoco_warp._src.render_util import create_render_context as create_render_context
 from mujoco.mjx.third_party.mujoco_warp._src.render_util import get_depth as get_depth
 from mujoco.mjx.third_party.mujoco_warp._src.render_util import get_rgb as get_rgb

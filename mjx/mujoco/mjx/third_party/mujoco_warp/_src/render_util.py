@@ -13,6 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
+import copy
+
 import mujoco
 import numpy as np
 import warp as wp
@@ -398,9 +400,43 @@ def create_render_context(
   Returns:
     The render context containing rendering fields and output arrays on device.
   """
-  mjd = mujoco.MjData(mjm)
-  mujoco.mj_forward(mjm, mjd)
+  settings = locals().copy()
+  settings.pop("mjm")
+  settings.pop("nworld")
+  return create_render_workspace(mjm, create_render_assets(mjm, **settings), nworld)
 
+
+def create_render_assets(
+  mjm: mujoco.MjModel,
+  cam_res: list[tuple[int, int]] | tuple[int, int] | None = None,
+  render_rgb: list[bool] | bool | None = None,
+  render_depth: list[bool] | bool | None = None,
+  render_seg: list[bool] | bool | None = None,
+  use_textures: bool = True,
+  use_fast_math: bool = True,
+  use_shadows: bool = False,
+  use_ambient_lighting: bool = True,
+  enabled_geom_groups: list[int] = [0, 1, 2],
+  cam_active: list[bool] | list[str] | list[int] | None = None,
+  background_color: tuple[float, float, float, float] = (0.1, 0.1, 0.2, 1.0),
+  flex_render_smooth: bool = True,
+  use_precomputed_rays: bool = True,
+  render_skybox: bool = False,
+  enable_backface_culling: bool = True,
+  shadow_light_fraction: float = 0.3,
+  samples_per_pixel: int = 1,
+  enable_vertex_normals: bool = True,
+  enable_specular: bool = True,
+  enable_emission: bool = True,
+  enable_per_light_ambient: bool = True,
+  splat_position: np.ndarray | None = None,
+  splat_rotation: np.ndarray | None = None,
+  splat_scale: np.ndarray | None = None,
+  splat_rgba: np.ndarray | None = None,
+  splat_adr: np.ndarray | None = None,
+  splat_group_id: np.ndarray | None = None,
+) -> RenderContext:
+  """Prepare rendering assets without allocating per-world workspace."""
   constructor = "cubql"
 
   # Build grouped splat BVH.
@@ -417,7 +453,7 @@ def create_render_context(
     splat_bvh_id = wp.uint64(0)
     splat_lower = wp.empty(0, dtype=wp.vec3)
     splat_upper = wp.empty(0, dtype=wp.vec3)
-    splat_group_root = wp.empty(nworld, dtype=int)
+    splat_group_root = wp.empty(0, dtype=int)
     splat_count = 0
   else:
     nsplat = splat_position.shape[0]
@@ -430,13 +466,13 @@ def create_render_context(
       raise ValueError("splat attributes must have shapes (nsplat, 3), (nsplat, 4), (nsplat, 3), and (nsplat, 4)")
     if splat_adr is not None and splat_adr.ndim != 1:
       raise ValueError("splat_adr must be one-dimensional")
-    if splat_group_id is not None and splat_group_id.shape != (nworld,):
-      raise ValueError("splat_group_id must be of shape (nworld,)")
+    if splat_group_id is not None and splat_group_id.ndim != 1:
+      raise ValueError("splat_group_id must be one-dimensional")
 
     if splat_adr is None:
       splat_adr = np.array([0, splat_position.shape[0]], dtype=np.int32)
     if splat_group_id is None:
-      splat_group_id = np.zeros(nworld, dtype=np.int32)
+      splat_group_id = np.zeros(1, dtype=np.int32)
     (
       splat_position,
       splat_rotation,
@@ -494,7 +530,7 @@ def create_render_context(
   flex_geom_edgeid = []
   flex_bvh_id = np.full(nflex, 0, dtype=np.uint64)
   # Indexed later as [worldid, flexid].
-  flex_group_root = np.full((nworld, nflex), -1, dtype=int)
+  flex_group_root = np.full((0, nflex), -1, dtype=int)
 
   for f in range(nflex):
     if mjm.flex_dim[f] == 1:
@@ -504,10 +540,6 @@ def create_render_context(
     else:
       flex_geom_flexid.append(f)
       flex_geom_edgeid.append(-1)
-      fmesh, group_root = bvh.build_flex_bvh(mjm, mjd, nworld, f)
-      flex_registry[f] = fmesh
-      flex_bvh_id[f] = fmesh.id
-      flex_group_root[:, f] = group_root.numpy()
 
   textures_registry = []
   # Only materialize GPU textures when the caller actually needs them.
@@ -673,7 +705,7 @@ def create_render_context(
       )
       offset += img_w * img_h
 
-  aa_accum = wp.zeros((nworld, ri if nsamples > 1 else 1), dtype=wp.vec3)
+  aa_accum = wp.zeros((0, ri if nsamples > 1 else 1), dtype=wp.vec3)
 
   bvh_ngeom = len(geom_enabled_idx)
 
@@ -739,19 +771,19 @@ def create_render_context(
     flex_geom_edgeid=wp.array(flex_geom_edgeid, dtype=int),
     bvh=None,
     bvh_id=None,
-    lower=wp.zeros(nworld * (bvh_ngeom + len(flex_geom_flexid)), dtype=wp.vec3),
-    upper=wp.zeros(nworld * (bvh_ngeom + len(flex_geom_flexid)), dtype=wp.vec3),
-    group=wp.zeros(nworld * (bvh_ngeom + len(flex_geom_flexid)), dtype=int),
-    group_root=wp.zeros(nworld, dtype=int),
+    lower=wp.empty(0, dtype=wp.vec3),
+    upper=wp.empty(0, dtype=wp.vec3),
+    group=wp.empty(0, dtype=int),
+    group_root=wp.empty(0, dtype=int),
     ray=ray,
     ray_offset=ray_offset,
-    rgb_data=wp.zeros((nworld, ri), dtype=wp.uint32),
+    rgb_data=wp.empty((0, ri), dtype=wp.uint32),
     rgb_adr=wp.array(rgb_adr, dtype=int),
-    depth_data=wp.zeros((nworld, di), dtype=wp.float32),
+    depth_data=wp.empty((0, di), dtype=wp.float32),
     depth_adr=wp.array(depth_adr, dtype=int),
     render_rgb=wp.array(render_rgb, dtype=bool),
     render_depth=wp.array(render_depth, dtype=bool),
-    seg_data=wp.zeros((nworld, max(si, 1)), dtype=wp.vec2i),
+    seg_data=wp.empty((0, max(si, 1)), dtype=wp.vec2i),
     seg_adr=wp.array(seg_adr, dtype=int),
     render_seg=wp.array(render_seg, dtype=bool),
     znear=znear,
@@ -780,7 +812,49 @@ def create_render_context(
     splat_count=splat_count,
   )
 
-  bvh.build_scene_bvh(mjm, mjd, rc, nworld)
+  warp_util.mark_batched(rc)
+  return rc
 
+
+def create_render_workspace(mjm: mujoco.MjModel, assets: RenderContext, nworld: int) -> RenderContext:
+  """Allocate independent mutable workspace sharing immutable rendering assets."""
+  if nworld < 1:
+    raise ValueError("nworld must be positive")
+  if assets.splat_count and assets.splat_group_root.shape[0] not in (1, nworld):
+    raise ValueError("splat_group_id must contain a singleton or match nworld")
+
+  mjd = mujoco.MjData(mjm)
+  mujoco.mj_forward(mjm, mjd)
+  rc = copy.copy(assets)
+  nprimitive = nworld * (rc.bvh_ngeom + rc.bvh_nflexgeom)
+  rc.lower = wp.zeros(nprimitive, dtype=wp.vec3)
+  rc.upper = wp.zeros(nprimitive, dtype=wp.vec3)
+  rc.group = wp.zeros(nprimitive, dtype=int)
+  rc.group_root = wp.zeros(nworld, dtype=int)
+  rc.rgb_data = wp.zeros((nworld, assets.rgb_data.shape[1]), dtype=wp.uint32)
+  rc.depth_data = wp.zeros((nworld, assets.depth_data.shape[1]), dtype=wp.float32)
+  rc.seg_data = wp.zeros((nworld, assets.seg_data.shape[1]), dtype=wp.vec2i)
+  rc.aa_accum = wp.zeros((nworld, assets.aa_accum.shape[1]), dtype=wp.vec3)
+
+  rc.flex_mesh_registry = {}
+  flex_bvh_id = np.zeros(mjm.nflex, dtype=np.uint64)
+  flex_group_root = np.full((nworld, mjm.nflex), -1, dtype=int)
+  for f in range(mjm.nflex):
+    if mjm.flex_dim[f] == 1:
+      continue
+    mesh, group_root = bvh.build_flex_bvh(mjm, mjd, nworld, f)
+    rc.flex_mesh_registry[f] = mesh
+    flex_bvh_id[f] = mesh.id
+    flex_group_root[:, f] = group_root.numpy()
+  rc.flex_bvh_id = wp.array(flex_bvh_id, dtype=wp.uint64)
+  rc.flex_group_root = wp.array(flex_group_root, dtype=int)
+
+  if rc.splat_count:
+    roots = np.broadcast_to(assets.splat_group_root.numpy(), (nworld,)).copy()
+    rc.splat_group_root = wp.array(roots, dtype=int)
+  else:
+    rc.splat_group_root = wp.empty(nworld, dtype=int)
+
+  bvh.build_scene_bvh(mjm, mjd, rc, nworld)
   warp_util.mark_batched(rc)
   return rc
